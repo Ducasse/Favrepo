@@ -1,6 +1,6 @@
-A simple tool fo manage favorite repositories 
+A simple tool to manage favorite repositories. Please use it and give feedback.
 
-To add it automatically to your lovely Pharo images. 
+To load it automatically to your lovely Pharo images, just places this expression in your preference folder.
 
 ```
 StartupPreferencesLoader default executeAtomicItems: {
@@ -16,4 +16,26 @@ StartupPreferencesLoader default executeAtomicItems: {
 			load: 'Core'
 		] runOnce: true}
 ```
+
+or run the following script in your playground. 
+
+```
+| folder file |
+  folder := StartupPreferencesLoader preferencesVersionFolder.
+  folder ensureCreateDirectory.
+  file := folder / 'FavrepoSettings.st'.
+  file ensureDelete; writeStreamDo: [ :stream |
+          stream nextPutAll: 'StartupPreferencesLoader default executeAtomicItems: {
+          StartupAction
+                  name: ''Load Favrepo''
+                  code: [
+                          Metacello new
+                                  baseline: ''Favrepo'';
+                                  repository: ''github://Ducasse/Favrepo/src'';
+                                  onConflictUseLoaded;
+                                  load: ''Core'' ]
+                  runOnce: true }' ].
+  file
+```
+
 ![screen.png](screen.png)
