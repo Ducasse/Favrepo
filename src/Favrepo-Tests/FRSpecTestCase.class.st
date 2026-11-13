@@ -32,6 +32,7 @@ FRSpecTestCase >> catalog [
 				   beCloned;
 				   currentVersion: 'master';
 				   versions: #( 'master' 'dev' );
+				   iceRepository: #favrepoRepository;
 				   yourself).
 			  ((FRRepositoryInfo name: 'Microdown' url: 'git@github.com:pillar-markup/Microdown.git')
 				   beCloned;

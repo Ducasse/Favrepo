@@ -1,10 +1,11 @@
 "
-I am the view of the current image used by the favorites tool: the repositories Iceberg knows, as `FRRepositoryInfo`s.
+I am the view of the current image used by the favorites tool: the repositories Iceberg knows, as `FRRepositoryInfo`s, and the clones Iceberg forgot but left on disk.
 
 ## Responsibility:
 
 - I match a favorite with a repository of the image by name, ignoring case; a loaded repository wins when a name is registered twice.
 - I answer the state of a favorite: `#loaded`, `#cloned` (in the image, nothing loaded) or `#notCloned`.
+- I find the clone of a favorite left in Iceberg's folder (`<owner>/<project>`) after Forget, and read its branches without registering it.
 - I list the repositories that are not favorites yet, for the add dialog.
 
 ## Collaborators:
@@ -13,10 +14,16 @@ I am the view of the current image used by the favorites tool: the repositories 
 - `FRFavorite` is what I am asked about.
 - `FRFavoriteLoader` asks me for the existing clone of a favorite.
 
+## Internal Representation
+
+- `infos`: the `FRRepositoryInfo`s of the registered repositories.
+- `clonesLocation`: the folder searched for forgotten clones, or nil to never look on disk.
+- `diskInfos`: the forgotten clones already read, by folder.
+
 ## Public API and Key Messages
 
-- `FRCatalog current` takes a snapshot of the image now.
-- `FRCatalog withAll: someInfos` builds a catalog by hand (tests, examples).
+- `FRCatalog current` takes a snapshot of the image now, and looks on disk in Iceberg's clone folder.
+- `FRCatalog withAll: someInfos` builds a catalog by hand (tests, examples); it looks on disk only after `clonesLocation:`.
 - `stateOf:`, `isLoaded:`, `infoFor:`, `infoNamed:`, `availableFor:`.
 
 ```
@@ -29,7 +36,9 @@ Class {
 	#name : 'FRCatalog',
 	#superclass : 'Object',
 	#instVars : [
-		'infos'
+		'infos',
+		'clonesLocation',
+		'diskInfos'
 	],
 	#category : 'Favrepo',
 	#package : 'Favrepo'
@@ -37,9 +46,11 @@ Class {
 
 { #category : 'instance creation' }
 FRCatalog class >> current [
-	"A snapshot of the repositories registered in Iceberg right now."
+	"A snapshot of the repositories registered in Iceberg right now, that also finds the clones Iceberg forgot."
 
-	^ self withAll: (IceRepository registry collect: [ :each | FRRepositoryInfo fromIceRepository: each ])
+	^ (self withAll: (IceRepository registry collect: [ :each | FRRepositoryInfo fromIceRepository: each ]))
+		  clonesLocation: IceLibgitRepository repositoriesLocation;
+		  yourself
 ]
 
 { #category : 'examples' }
@@ -76,9 +87,29 @@ FRCatalog >> availableFor: someFavorites [
 ]
 
 { #category : 'accessing' }
-FRCatalog >> infoFor: aFavorite [
+FRCatalog >> clonesLocation [
 
-	^ self infoNamed: aFavorite name
+	^ clonesLocation
+]
+
+{ #category : 'accessing' }
+FRCatalog >> clonesLocation: aFileReference [
+	"Also look for clones left in aFileReference (<owner>/<project>) that Iceberg does not know any more."
+
+	clonesLocation := aFileReference
+]
+
+{ #category : 'private' }
+FRCatalog >> diskInfos [
+
+	^ diskInfos ifNil: [ diskInfos := Dictionary new ]
+]
+
+{ #category : 'accessing' }
+FRCatalog >> infoFor: aFavorite [
+	"The repository of aFavorite registered in Iceberg, else its clone left on disk, else nil."
+
+	^ (self infoNamed: aFavorite name) ifNil: [ self infoOnDiskFor: aFavorite ]
 ]
 
 { #category : 'accessing' }
@@ -88,6 +119,21 @@ FRCatalog >> infoNamed: aString [
 	| matching |
 	matching := infos select: [ :each | each hasName: aString ].
 	^ matching detect: [ :each | each isLoaded ] ifNone: [ matching ifEmpty: [ nil ] ifNotEmpty: [ matching first ] ]
+]
+
+{ #category : 'private' }
+FRCatalog >> infoOnDiskFor: aFavorite [
+	"The clone of aFavorite left in the clones location without being registered in Iceberg (after Forget), or nil. Its branches are read without registering it."
+
+	| directory |
+	(clonesLocation isNil or: [ (FRFavorite isValidUrl: aFavorite url) not ]) ifTrue: [ ^ nil ].
+	directory := aFavorite cloneDirectoryIn: clonesLocation.
+	(IceRepositoryCreator isGitRoot: directory) ifFalse: [ ^ nil ].
+	^ self diskInfos at: directory fullName ifAbsentPut: [
+		  FRRepositoryInfo fromIceRepository: (IceLibgitRepository new
+				   name: aFavorite name;
+				   location: directory;
+				   yourself) ]
 ]
 
 { #category : 'accessing' }
@@ -100,6 +146,13 @@ FRCatalog >> infos [
 FRCatalog >> isLoaded: aFavorite [
 
 	^ (self stateOf: aFavorite) = #loaded
+]
+
+{ #category : 'accessing' }
+FRCatalog >> registeredRepositoryFor: aFavorite [
+	"The Iceberg repository of aFavorite when Iceberg has it registered, nil otherwise."
+
+	^ (self infoNamed: aFavorite name) ifNotNil: [ :info | info iceRepository ]
 ]
 
 { #category : 'initialization' }

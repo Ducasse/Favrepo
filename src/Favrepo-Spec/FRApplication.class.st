@@ -17,6 +17,7 @@ I am the Spec application of the favorites tool: I open its window and give its 
 
 - `FRApplication new run` (Spec's entry point; it calls `start`, which I override)
 - `store:`, `catalog:`, `loader:`, `beSynchronous` replace the defaults (tests, examples).
+- `browseRepository:` opens the Iceberg repository browser (`repositoryBrowser:` replaces it in tests).
 - `run:titled:`, `inUIProcess:`, `reportFailure:titled:`, `tell:`, `confirm:titled:`, `request:initialAnswer:titled:`.
 
 ```
@@ -31,10 +32,11 @@ See `FRApplication class >> #exampleInMemory` and run `FRApplication class >> #s
 - `catalogProvider`: nil means a new `FRCatalog current` on each request.
 - `loader`: nil means a new `FRFavoriteLoader`.
 - `isSynchronous`: a Boolean.
+- `repositoryBrowser`: nil means open an `IceTipRepositoryBrowser`.
 
 ### Implementation Points
 
-The stylesheet adds the `frName`, `frInitial` and `frNotLoaded` (grey) label styles.
+The stylesheet adds the `frInitial` (14 pt) and `frNotLoaded` (grey) label styles. Bold is set with `displayBold:` on the labels, never with `Font { #bold: true }`: `SpFontStyle` would make the image's shared regular font bold.
 "
 Class {
 	#name : 'FRApplication',
@@ -43,7 +45,8 @@ Class {
 		'store',
 		'catalogProvider',
 		'loader',
-		'isSynchronous'
+		'isSynchronous',
+		'repositoryBrowser'
 	],
 	#category : 'Favrepo-Spec',
 	#package : 'Favrepo-Spec'
@@ -89,6 +92,14 @@ FRApplication >> beSynchronous [
 	isSynchronous := true
 ]
 
+{ #category : 'dialogs' }
+FRApplication >> browseRepository: anIceRepository [
+	"Open the Iceberg repository browser on anIceRepository."
+
+	(repositoryBrowser ifNil: [ [ :repository | (IceTipRepositoryBrowser onRepository: repository) open ] ])
+		value: anIceRepository
+]
+
 { #category : 'accessing' }
 FRApplication >> catalog [
 	"A fresh snapshot of the repositories in the image, unless a fixed catalog was given."
@@ -120,7 +131,7 @@ FRApplication >> confirm: aString titled: aTitle [
 	isSynchronous ifTrue: [ ^ true ].
 	^ self newConfirm
 		  title: aTitle;
-		  label: aString;
+		  message: aString;
 		  openModal
 ]
 
@@ -154,8 +165,7 @@ FRApplication >> initialize [
 	isSynchronous := false.
 	self addStyleSheetFromString: '.application [
 		.label [
-			.frName [ Font { #bold: true } ],
-			.frInitial [ Font { #bold: true, #size: 14 } ],
+			.frInitial [ Font { #size: 14 } ],
 			.frNotLoaded [ Draw { #color: EnvironmentColor(#disabledText) } ] ] ]'
 ]
 
@@ -194,13 +204,20 @@ FRApplication >> reportFailure: aString titled: aTitle [
 		openModal
 ]
 
+{ #category : 'accessing' }
+FRApplication >> repositoryBrowser: aBlock [
+	"aBlock opens a browser on the Iceberg repository it is given (tests record it instead)."
+
+	repositoryBrowser := aBlock
+]
+
 { #category : 'dialogs' }
 FRApplication >> request: aString initialAnswer: anAnswer titled: aTitle [
 	"Ask for a text; nil when cancelled."
 
 	^ self newRequest
 		  title: aTitle;
-		  label: aString;
+		  message: aString;
 		  text: anAnswer;
 		  openModal
 ]

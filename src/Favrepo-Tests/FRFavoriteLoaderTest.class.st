@@ -29,9 +29,23 @@ FRFavoriteLoaderTest >> cloneWithSource: aSourceFolder baselines: someNames [
 ]
 
 { #category : 'helpers' }
+FRFavoriteLoaderTest >> clonesLoader [
+
+	^ self loader
+		  clonesLocation: fileSystem root / 'iceberg';
+		  yourself
+]
+
+{ #category : 'helpers' }
 FRFavoriteLoaderTest >> loader [
 
 	^ FRFavoriteLoader new
+]
+
+{ #category : 'helpers' }
+FRFavoriteLoaderTest >> mustache [
+
+	^ FRFavorite url: 'git@github.com:noha/mustache.git' name: 'Mustache' branch: 'v1.3'
 ]
 
 { #category : 'running' }
@@ -68,9 +82,34 @@ FRFavoriteLoaderTest >> testChooserCancelRaisesError [
 ]
 
 { #category : 'tests' }
+FRFavoriteLoaderTest >> testCloneDirectoryIsOwnerAndProjectInTheClonesLocation [
+
+	self
+		assert: (self clonesLoader cloneDirectoryFor: self mustache)
+		equals: fileSystem root / 'iceberg' / 'noha' / 'mustache'
+]
+
+{ #category : 'tests' }
 FRFavoriteLoaderTest >> testDefaultBranchMeansNoCommitish [
 
 	self assert: (self loader commitishFor: (FRFavorite url: 'git@github.com:noha/mustache.git')) isNil
+]
+
+{ #category : 'tests' }
+FRFavoriteLoaderTest >> testFolderWithoutGitIsNoExistingClone [
+
+	(fileSystem root / 'iceberg' / 'noha' / 'mustache') ensureCreateDirectory.
+	self assert: (self clonesLoader existingCloneFor: self mustache) isNil
+]
+
+{ #category : 'tests' }
+FRFavoriteLoaderTest >> testGitFolderLeftOnDiskIsAnExistingClone [
+
+	| folder |
+	folder := fileSystem root / 'iceberg' / 'noha' / 'mustache'.
+	(folder / '.git') ensureCreateDirectory.
+	(folder / '.git' / 'config') writeStreamDo: [ :stream | stream nextPutAll: '[core]' ].
+	self assert: (self clonesLoader existingCloneFor: self mustache) equals: folder
 ]
 
 { #category : 'tests' }
@@ -79,6 +118,12 @@ FRFavoriteLoaderTest >> testMetacelloRepositoryIsGitlocalOnTheSourceDirectory [
 	| clone |
 	clone := self cloneWithSource: 'src' baselines: #( 'BaselineOfMyProject' ).
 	self assert: (self loader metacelloRepositoryFor: clone) equals: 'gitlocal://' , (clone / 'src') fullName
+]
+
+{ #category : 'tests' }
+FRFavoriteLoaderTest >> testMissingFolderIsNoExistingClone [
+
+	self assert: (self clonesLoader existingCloneFor: self mustache) isNil
 ]
 
 { #category : 'tests' }

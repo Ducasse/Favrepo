@@ -5,6 +5,7 @@ I keep the favorites in a STON file shared by every image of the user, so the li
 
 - I read the file again on every request, so two open images never overwrite each other with an old list.
 - I write the file on every change (add, remove, replace) as a plain list of dictionaries that can be edited by hand.
+- I make the favorites cloned in the image follow the branch or tag Iceberg has checked out (`takeBranchesFrom:`).
 - I refuse a second favorite with the same name by raising `FRDuplicateFavoriteError`.
 
 ## Collaborators:
@@ -17,7 +18,7 @@ I keep the favorites in a STON file shared by every image of the user, so the li
 
 - `FRFavoriteStore default` is the store of the tool: the custom location when set, `FileLocator preferences / 'pharo' / 'iceberg-favorites.ston'` otherwise.
 - `FRFavoriteStore on: aFileReference` for another file (tests use a memory file system).
-- `favorites`, `add:`, `remove:`, `replace:with:`, `includes:`, `favoriteNamed:ifNone:`.
+- `favorites`, `add:`, `remove:`, `replace:with:`, `includes:`, `favoriteNamed:ifNone:`, `takeBranchesFrom:`.
 
 ```
 FRFavoriteStore default favorites
@@ -118,6 +119,16 @@ FRFavoriteStore >> add: aFavorite [
 ]
 
 { #category : 'private' }
+FRFavoriteStore >> checkedOutVersionOf: aFavorite in: aCatalog [
+	"The branch or tag checked out in the clone of aFavorite, or nil when the image has no clone of it."
+
+	| info |
+	info := aCatalog infoFor: aFavorite.
+	(info isNil or: [ info isCloned not ]) ifTrue: [ ^ nil ].
+	^ info currentVersion
+]
+
+{ #category : 'private' }
 FRFavoriteStore >> ensureNoneIn: someFavorites isSameAs: aFavorite [
 
 	someFavorites detect: [ :each | each isSameAs: aFavorite ] ifFound: [ :existing | FRDuplicateFavoriteError signalFor: existing ]
@@ -177,6 +188,23 @@ FRFavoriteStore >> replace: oldFavorite with: newFavorite [
 FRFavoriteStore >> setFile: aFileReference [
 
 	file := aFileReference
+]
+
+{ #category : 'updating' }
+FRFavoriteStore >> takeBranchesFrom: aCatalog [
+	"Set the branch of each favorite cloned in the image to the branch or tag Iceberg has checked out, write the file, and answer the favorites that changed."
+
+	| changed favorites |
+	changed := OrderedCollection new.
+	favorites := self readFavorites collect: [ :each |
+		             (self checkedOutVersionOf: each in: aCatalog)
+			             ifNil: [ each ]
+			             ifNotNil: [ :version |
+				             version = each branch
+					             ifTrue: [ each ]
+					             ifFalse: [ changed add: (each withBranch: version) ] ] ].
+	changed ifNotEmpty: [ self writeFavorites: favorites ].
+	^ changed asArray
 ]
 
 { #category : 'private' }

@@ -25,6 +25,14 @@ FRCatalogTest >> catalog [
 ]
 
 { #category : 'helpers' }
+FRCatalogTest >> catalogOnClonesIn: aFileSystem [
+
+	^ (FRCatalog withAll: #(  ))
+		  clonesLocation: aFileSystem root / 'iceberg';
+		  yourself
+]
+
+{ #category : 'helpers' }
 FRCatalogTest >> favoriteNamed: aString [
 
 	^ FRFavorite url: ('git@github.com:someone/{1}.git' format: { aString })
@@ -36,6 +44,25 @@ FRCatalogTest >> testAvailableForExcludesFavorites [
 	| names |
 	names := (self catalog availableFor: { (self favoriteNamed: 'Roassal') }) collect: [ :each | each name ].
 	self assert: names asSet equals: #( 'Favrepo' 'tonel' ) asSet
+]
+
+{ #category : 'tests' }
+FRCatalogTest >> testCatalogWithoutClonesLocationDoesNotLookOnDisk [
+
+	self assert: (FRCatalog withAll: #(  )) clonesLocation isNil
+]
+
+{ #category : 'tests' }
+FRCatalogTest >> testCloneLeftOnDiskIsCloned [
+
+	| fileSystem gitFolder |
+	fileSystem := FileSystem memory.
+	gitFolder := fileSystem root / 'iceberg' / 'noha' / 'mustache' / '.git'.
+	gitFolder ensureCreateDirectory.
+	(gitFolder / 'config') writeStreamDo: [ :stream | stream nextPutAll: '[core]' ].
+	self
+		assert: ((self catalogOnClonesIn: fileSystem) stateOf: (FRFavorite url: 'git@github.com:noha/mustache.git'))
+		equals: #cloned
 ]
 
 { #category : 'tests' }
@@ -76,6 +103,14 @@ FRCatalogTest >> testMatchingIgnoresCase [
 ]
 
 { #category : 'tests' }
+FRCatalogTest >> testNoCloneOnDiskIsNotCloned [
+
+	self
+		assert: ((self catalogOnClonesIn: FileSystem memory) stateOf: (FRFavorite url: 'git@github.com:noha/mustache.git'))
+		equals: #notCloned
+]
+
+{ #category : 'tests' }
 FRCatalogTest >> testSameNameTwiceIsLoadedWhenOneIsLoaded [
 
 	self assert: (self catalog stateOf: (self favoriteNamed: 'tonel')) equals: #loaded
@@ -85,4 +120,15 @@ FRCatalogTest >> testSameNameTwiceIsLoadedWhenOneIsLoaded [
 FRCatalogTest >> testUnknownRepositoryGivesNotClonedState [
 
 	self assert: (self catalog stateOf: (self favoriteNamed: 'Seaside')) equals: #notCloned
+]
+
+{ #category : 'tests' }
+FRCatalogTest >> testVersionsAreLocalThenRemoteBranchesThenTags [
+
+	self
+		assert: (FRRepositoryInfo
+				 versionNamesFromLocal: #( 'master' )
+				 remote: #( 'HEAD' 'master' 'dev' )
+				 tags: #( 'v1.0' ))
+		equals: #( 'master' 'dev' 'v1.0' )
 ]

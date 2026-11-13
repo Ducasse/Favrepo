@@ -1,11 +1,11 @@
 "
-I am the main window of the favorites tool: one row per favorite, sorted by name, and a + button to add one.
+I am the main window of the favorites tool, four rows high and scrolling beyond: one row per favorite, sorted by name, a refresh button that takes the branches from Iceberg, and a + button to add a favorite.
 
 ## Responsibility:
 
 - I rebuild my rows from the favorites file and a fresh catalog of the image on every change.
-- I load a favorite, change its branch, remove it (after confirmation) and open the add and edit dialogs.
-- I offer Edit and Remove from favorites (Delete key) in the row context menu.
+- I clone a favorite, load it, change its branch, remove it (no confirmation: only the bookmark goes, and + adds it back) and open the add and edit dialogs.
+- I offer Edit and Remove from favorites (Delete key) in the row context menu; a double-click opens the Iceberg repository browser of a favorite Iceberg has.
 
 ## Collaborators:
 
@@ -16,8 +16,8 @@ I am the main window of the favorites tool: one row per favorite, sorted by name
 
 ## Public API and Key Messages
 
-- `refresh`, `rows`, `rowNamed:`, `selectedFavorite`, `selectFavoriteNamed:`
-- `loadFavorite:`, `changeBranch:of:`, `removeFavorite:`, `openAddDialog`, `openEditDialogOn:`
+- `takeBranchesFromIceberg` (the refresh button), `refresh`, `rows`, `rowNamed:`, `selectedFavorite`, `selectFavoriteNamed:`
+- `cloneFavorite:`, `loadFavorite:`, `changeBranch:of:`, `removeFavorite:`, `removeSelectedFavorite`, `browseFavorite:`, `openAddDialog`, `openEditDialogOn:`
 
 See `FRFavoritesPresenter class >> #exampleInMemory` and run `FRFavoritesPresenter class >> #scriptOpenInMemory`.
 "
@@ -27,7 +27,8 @@ Class {
 	#instVars : [
 		'titleLabel',
 		'addButton',
-		'list'
+		'list',
+		'refreshButton'
 	],
 	#category : 'Favrepo-Spec',
 	#package : 'Favrepo-Spec'
@@ -50,6 +51,14 @@ FRFavoritesPresenter class >> scriptOpenInMemory [
 ]
 
 { #category : 'actions' }
+FRFavoritesPresenter >> browseFavorite: aFavorite [
+	"Open Iceberg on the repository of aFavorite; nothing happens while Iceberg does not have it."
+
+	(self application catalog registeredRepositoryFor: aFavorite) ifNotNil: [ :repository |
+		self application browseRepository: repository ]
+]
+
+{ #category : 'actions' }
 FRFavoritesPresenter >> changeBranch: aString of: aFavorite [
 
 	self application store replace: aFavorite with: (aFavorite withBranch: aString).
@@ -57,11 +66,26 @@ FRFavoritesPresenter >> changeBranch: aString of: aFavorite [
 ]
 
 { #category : 'actions' }
-FRFavoritesPresenter >> confirmAndRemove: aFavorite [
+FRFavoritesPresenter >> cloneFavorite: aFavorite [
+	"Clone aFavorite with a progress bar, without loading it, then show its new state."
 
-	(self application
-		 confirm: ('Remove {1} from your favorites? Its clone and loaded code stay in the image.' format: { aFavorite name })
-		 titled: 'Remove favorite') ifTrue: [ self removeFavorite: aFavorite ]
+	(self rowNamed: aFavorite name) ifNotNil: [ :row | row beCloning ].
+	self application
+		run: [
+				[ self application newLoader clone: aFavorite ]
+					on: Error
+					do: [ :error |
+							self application inUIProcess: [
+								self application reportFailure: error messageText titled: ('Cloning {1} failed' format: { aFavorite name }) ] ].
+				self application inUIProcess: [ self refresh ] ]
+		titled: ('Cloning {1}' format: { aFavorite name })
+]
+
+{ #category : 'initialization' }
+FRFavoritesPresenter >> connectPresenters [
+
+	list whenActivatedDo: [ :selection |
+		selection selectedItem ifNotNil: [ :row | self browseFavorite: row favorite ] ]
 ]
 
 { #category : 'layout' }
@@ -71,7 +95,9 @@ FRFavoritesPresenter >> defaultLayout [
 		  spacing: 4;
 		  add: (SpBoxLayout newLeftToRight
 				   vAlignCenter;
+				   spacing: 4;
 				   add: titleLabel;
+				   add: refreshButton expand: false;
 				   add: addButton expand: false;
 				   yourself)
 		  expand: false;
@@ -86,13 +112,24 @@ FRFavoritesPresenter >> favoriteAccepted: aFavorite [
 	self selectFavoriteNamed: aFavorite name
 ]
 
+{ #category : 'accessing' }
+FRFavoritesPresenter >> favoritesList [
+
+	^ list
+]
+
 { #category : 'initialization' }
 FRFavoritesPresenter >> initializePresenters [
 
 	titleLabel := self newLabel
 		              label: 'Favorite repositories';
-		              addStyle: 'frName';
+		              displayBold: [ :text | true ];
 		              yourself.
+	refreshButton := self newButton
+		                 icon: (self iconNamed: #refresh);
+		                 help: 'Take the branches from Iceberg and check again what is loaded';
+		                 action: [ self takeBranchesFromIceberg ];
+		                 yourself.
 	addButton := self newButton
 		             icon: (self iconNamed: #add);
 		             help: 'Add a favorite repository';
@@ -100,6 +137,7 @@ FRFavoritesPresenter >> initializePresenters [
 		             yourself.
 	list := self instantiate: SpEasyComponentListPresenter.
 	list
+		activateOnDoubleClick;
 		addActionWith: [ :action |
 				action
 					name: 'Edit…';
@@ -110,17 +148,19 @@ FRFavoritesPresenter >> initializePresenters [
 					name: 'Remove from favorites';
 					shortcutKey: KeyboardKey delete asKeyCombination;
 					actionEnabled: [ self selectedFavorite isNotNil ];
-					action: [ self confirmAndRemove: self selectedFavorite ] ].
+					action: [ self removeSelectedFavorite ] ].
 	self refresh
 ]
 
 { #category : 'initialization' }
 FRFavoritesPresenter >> initializeWindow: aWindowPresenter [
+	"Four rows high. The rows are set again once the window is open: built before, the list misses that it needs a scroll bar."
 
 	super initializeWindow: aWindowPresenter.
 	aWindowPresenter
 		title: 'Favorite repositories';
-		initialExtent: 520 @ 380
+		initialExtent: 520 @ 209;
+		whenOpenedDo: [ self refresh ]
 ]
 
 { #category : 'actions' }
@@ -156,7 +196,7 @@ FRFavoritesPresenter >> openEditDialogOn: aFavorite [
 		openDialog
 ]
 
-{ #category : 'actions' }
+{ #category : 'updating' }
 FRFavoritesPresenter >> refresh [
 	"Read the favorites file again and rebuild the rows against a fresh view of the image."
 
@@ -165,9 +205,16 @@ FRFavoritesPresenter >> refresh [
 	selected := self selectedFavorite.
 	list presenters: (self application store favorites collect: [ :each |
 				 (self instantiate: FRFavoriteRowPresenter)
+					 favoritesPresenter: self;
 					 setFavorite: each catalog: catalog;
 					 yourself ]).
 	selected ifNotNil: [ self selectFavoriteNamed: selected name ]
+]
+
+{ #category : 'accessing' }
+FRFavoritesPresenter >> refreshButton [
+
+	^ refreshButton
 ]
 
 { #category : 'actions' }
@@ -175,6 +222,13 @@ FRFavoritesPresenter >> removeFavorite: aFavorite [
 
 	self application store remove: aFavorite.
 	self refresh
+]
+
+{ #category : 'actions' }
+FRFavoritesPresenter >> removeSelectedFavorite [
+	"Remove the selected favorite from the list only: its clone and loaded code stay, and + adds it back."
+
+	self selectedFavorite ifNotNil: [ :favorite | self removeFavorite: favorite ]
 ]
 
 { #category : 'accessing' }
@@ -199,4 +253,12 @@ FRFavoritesPresenter >> selectFavoriteNamed: aString [
 FRFavoritesPresenter >> selectedFavorite [
 
 	^ list selectedItem ifNotNil: [ :row | row favorite ]
+]
+
+{ #category : 'actions' }
+FRFavoritesPresenter >> takeBranchesFromIceberg [
+	"Make each favorite cloned in the image follow the branch or tag Iceberg has checked out, then show the image again."
+
+	self application store takeBranchesFrom: self application catalog.
+	self refresh
 ]

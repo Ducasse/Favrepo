@@ -111,12 +111,24 @@ FRRepositoryInfo class >> urlOf: anIceRepository [
 ]
 
 { #category : 'private' }
+FRRepositoryInfo class >> versionNamesFromLocal: localNames remote: remoteNames tags: tagNames [
+	"Local branches, then the remote branches not already local (without the remote HEAD), then the tags."
+
+	^ (localNames asOrderedCollection
+		   addAll: (remoteNames reject: [ :each | each = 'HEAD' or: [ localNames includes: each ] ]);
+		   addAll: tagNames;
+		   yourself) asArray
+]
+
+{ #category : 'private' }
 FRRepositoryInfo class >> versionsOf: anIceRepository [
-	"Local branch and tag names, read from the clone without any network access."
+	"Branch and tag names known by the clone (remote branches as of the last fetch), without any network access."
 
 	^ [
-		  (anIceRepository localBranches collect: [ :each | each name ] as: Array)
-		  , (anIceRepository tags collect: [ :each | each name ] as: Array) ]
+		  self
+			  versionNamesFromLocal: (anIceRepository localBranches collect: [ :each | each name ] as: Array)
+			  remote: (anIceRepository remoteTrackedBranches collect: [ :each | each shortName ] as: Array)
+			  tags: (anIceRepository tags collect: [ :each | each name ] as: Array) ]
 		  on: Error
 		  do: [ #(  ) ]
 ]

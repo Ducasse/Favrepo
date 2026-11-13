@@ -131,6 +131,15 @@ FRFavorite >> branch [
 	^ branch
 ]
 
+{ #category : 'accessing' }
+FRFavorite >> cloneDirectoryIn: aClonesLocation [
+	"Where Iceberg puts my clone inside aClonesLocation: <owner>/<project>."
+
+	| remote |
+	remote := self class remoteFor: url.
+	^ aClonesLocation / remote organizer / remote projectName
+]
+
 { #category : 'testing' }
 FRFavorite >> hasName: aString [
 

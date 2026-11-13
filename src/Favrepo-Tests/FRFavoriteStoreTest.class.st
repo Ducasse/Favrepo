@@ -18,6 +18,20 @@ FRFavoriteStoreTest >> favoriteNamed: aString [
 	^ FRFavorite url: ('git@github.com:someone/{1}.git' format: { aString })
 ]
 
+{ #category : 'helpers' }
+FRFavoriteStoreTest >> icebergCatalog [
+	"Favrepo is cloned on master, Roassal came with the image without a clone."
+
+	^ FRCatalog withAll: {
+			  ((FRRepositoryInfo name: 'Favrepo' url: 'git@github.com:Ducasse/Favrepo.git')
+				   beCloned;
+				   currentVersion: 'master';
+				   yourself).
+			  ((FRRepositoryInfo name: 'Roassal' url: nil)
+				   beLoaded;
+				   yourself) }
+]
+
 { #category : 'running' }
 FRFavoriteStoreTest >> setUp [
 
@@ -160,4 +174,33 @@ FRFavoriteStoreTest >> testReplacingWithAnExistingNameRaisesError [
 	store add: (self favoriteNamed: 'Seaside').
 	store add: (self favoriteNamed: 'Ume').
 	self should: [ store replace: (self favoriteNamed: 'Ume') with: (self favoriteNamed: 'Seaside') ] raise: FRDuplicateFavoriteError
+]
+
+{ #category : 'tests' }
+FRFavoriteStoreTest >> testTakeBranchesFromAnswersTheChangedFavorites [
+
+	| changed |
+	store add: (self favoriteNamed: 'Favrepo').
+	store add: (self favoriteNamed: 'Seaside').
+	changed := store takeBranchesFrom: self icebergCatalog.
+	self assert: (changed collect: [ :each | each name ] as: Array) equals: #( 'Favrepo' )
+]
+
+{ #category : 'tests' }
+FRFavoriteStoreTest >> testTakeBranchesFromKeepsFavoritesWithoutClone [
+
+	store add: ((self favoriteNamed: 'Roassal') withBranch: 'v1.0').
+	store add: ((self favoriteNamed: 'Seaside') withBranch: 'dev').
+	store takeBranchesFrom: self icebergCatalog.
+	self
+		assert: (store favorites collect: [ :each | each branch ] as: Array)
+		equals: #( 'v1.0' 'dev' )
+]
+
+{ #category : 'tests' }
+FRFavoriteStoreTest >> testTakeBranchesFromUsesTheCheckedOutVersion [
+
+	store add: (self favoriteNamed: 'Favrepo').
+	store takeBranchesFrom: self icebergCatalog.
+	self assert: store favorites first branch equals: 'master'
 ]

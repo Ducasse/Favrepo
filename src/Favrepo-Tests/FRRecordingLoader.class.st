@@ -8,11 +8,27 @@ Class {
 	#superclass : 'FRFavoriteLoader',
 	#instVars : [
 		'loaded',
-		'failure'
+		'failure',
+		'cloned'
 	],
 	#category : 'Favrepo-Tests',
 	#package : 'Favrepo-Tests'
 }
+
+{ #category : 'steps' }
+FRRecordingLoader >> clone: aFavorite [
+	"Record aFavorite instead of cloning it."
+
+	failure ifNotNil: [ FRError signal: failure ].
+	self cloned add: aFavorite.
+	^ nil
+]
+
+{ #category : 'accessing' }
+FRRecordingLoader >> cloned [
+
+	^ cloned ifNil: [ cloned := OrderedCollection new ]
+]
 
 { #category : 'accessing' }
 FRRecordingLoader >> failWith: aString [

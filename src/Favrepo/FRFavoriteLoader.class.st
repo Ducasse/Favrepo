@@ -3,7 +3,7 @@ I load a favorite into the image in one go: clone, find the baseline, load it wi
 
 ## Responsibility:
 
-- I clone the favorite with Iceberg at its branch or tag, or reuse its clone and switch it to that branch (asking first when the clone has uncommitted changes).
+- I clone the favorite with Iceberg at its branch or tag, register a clone left on disk (after Iceberg's Forget), or reuse its registered clone and switch it to that branch (asking first when the clone has uncommitted changes).
 - I find the source folder from the `.project` file and the `BaselineOf` packages in it; I ask which one to load when there are several.
 - I load the `default` group with `Metacello`, keeping the projects already loaded (`onConflictUseLoaded`).
 
@@ -16,9 +16,10 @@ I load a favorite into the image in one go: clone, find the baseline, load it wi
 
 ## Public API and Key Messages
 
+- `clone: aFavorite` only clones (or registers a clone left on disk) and answers the Iceberg repository.
 - `load: aFavorite` answers the Iceberg repository; raises `FRError` when there is no baseline or the user cancels.
-- `catalog:`, `baselineChooser:`, `switchConfirmer:` configure me.
-- `baselineNamesIn:`, `sourceDirectoryOf:`, `metacelloRepositoryFor:`, `commitishFor:` are the steps, testable without network.
+- `catalog:`, `baselineChooser:`, `switchConfirmer:`, `clonesLocation:` (Iceberg's clone folder by default) configure me.
+- `baselineNamesIn:`, `sourceDirectoryOf:`, `metacelloRepositoryFor:`, `commitishFor:`, `cloneDirectoryFor:`, `existingCloneFor:` are the steps, testable without network.
 
 ```
 FRFavoriteLoader new load: (FRFavorite url: 'git@github.com:noha/mustache.git')
@@ -32,7 +33,8 @@ Class {
 	#instVars : [
 		'catalog',
 		'baselineChooser',
-		'switchConfirmer'
+		'switchConfirmer',
+		'clonesLocation'
 	],
 	#category : 'Favrepo',
 	#package : 'Favrepo'
@@ -92,17 +94,40 @@ FRFavoriteLoader >> catalog: aCatalog [
 	catalog := aCatalog
 ]
 
-{ #category : 'loading' }
+{ #category : 'steps' }
 FRFavoriteLoader >> clone: aFavorite [
+	"Register the clone left on disk if there is one, otherwise clone aFavorite at its branch or tag."
 
 	| creator repository |
+	(self existingCloneFor: aFavorite) ifNotNil: [ :directory |
+		^ self register: directory for: aFavorite ].
 	creator := IceRepositoryCreator new
 		           remote: (IceGitRemote url: aFavorite url);
+		           location: (self cloneDirectoryFor: aFavorite);
 		           yourself.
 	(self commitishFor: aFavorite) ifNotNil: [ :commitish | creator commitishName: commitish ].
 	repository := creator createRepository.
 	repository register.
 	^ repository
+]
+
+{ #category : 'steps' }
+FRFavoriteLoader >> cloneDirectoryFor: aFavorite [
+	"Where Iceberg puts the clone of aFavorite: <clones location>/<owner>/<project>."
+
+	^ aFavorite cloneDirectoryIn: self clonesLocation
+]
+
+{ #category : 'accessing' }
+FRFavoriteLoader >> clonesLocation [
+
+	^ clonesLocation ifNil: [ IceLibgitRepository repositoriesLocation ]
+]
+
+{ #category : 'accessing' }
+FRFavoriteLoader >> clonesLocation: aFileReference [
+
+	clonesLocation := aFileReference
 ]
 
 { #category : 'baselines' }
@@ -112,6 +137,16 @@ FRFavoriteLoader >> commitishFor: aFavorite [
 	^ aFavorite isDefaultBranch
 		  ifTrue: [ nil ]
 		  ifFalse: [ aFavorite branch ]
+]
+
+{ #category : 'steps' }
+FRFavoriteLoader >> existingCloneFor: aFavorite [
+	"The clone of aFavorite left on disk without being registered in Iceberg (for example after Forget), or nil."
+
+	| directory |
+	directory := self cloneDirectoryFor: aFavorite.
+	(IceRepositoryCreator isGitRoot: directory) ifFalse: [ ^ nil ].
+	^ directory
 ]
 
 { #category : 'initialization' }
@@ -145,15 +180,28 @@ FRFavoriteLoader >> metacelloRepositoryFor: aCloneDirectory [
 	^ 'gitlocal://' , (self sourceDirectoryOf: aCloneDirectory) fullName
 ]
 
-{ #category : 'loading' }
+{ #category : 'steps' }
+FRFavoriteLoader >> register: aCloneDirectory for: aFavorite [
+	"Add the clone in aCloneDirectory to Iceberg, then put it on the favorite's branch."
+
+	| repository |
+	repository := IceRepositoryCreator new
+		              location: aCloneDirectory;
+		              createRepository.
+	repository register.
+	^ self switch: repository to: aFavorite
+]
+
+{ #category : 'steps' }
 FRFavoriteLoader >> repositoryFor: aFavorite [
-	"The Iceberg repository of aFavorite, cloned when it is not in the image yet."
+	"The Iceberg repository of aFavorite: cloned when it is not in the image yet, registered when only its clone was left on disk."
 
 	| info |
 	info := self catalog infoFor: aFavorite.
-	^ (info isNotNil and: [ info isCloned ])
-		  ifTrue: [ self switch: info iceRepository to: aFavorite ]
-		  ifFalse: [ self clone: aFavorite ]
+	(info isNil or: [ info isCloned not ]) ifTrue: [ ^ self clone: aFavorite ].
+	(info iceRepository isNotNil and: [ (IceRepository registry includes: info iceRepository) not ]) ifTrue: [
+		^ self register: info iceRepository location for: aFavorite ].
+	^ self switch: info iceRepository to: aFavorite
 ]
 
 { #category : 'baselines' }
