@@ -1,5 +1,5 @@
 "
-I am the main window of the favorites tool, four rows high and scrolling beyond: one row per favorite, sorted by name, a refresh button that takes the branches from Iceberg, and a + button to add a favorite.
+I am the main window of the favorites tool, four rows high and scrolling beyond: one row per favorite, sorted by name, an Iceberg button that opens Iceberg on all the repositories, a refresh button that takes the branches from Iceberg, and a + button to add a favorite.
 
 ## Responsibility:
 
@@ -25,10 +25,10 @@ Class {
 	#name : 'FRFavoritesPresenter',
 	#superclass : 'SpPresenter',
 	#instVars : [
-		'titleLabel',
 		'addButton',
 		'list',
-		'refreshButton'
+		'refreshButton',
+		'icebergButton'
 	],
 	#category : 'Favrepo-Spec',
 	#package : 'Favrepo-Spec'
@@ -96,9 +96,9 @@ FRFavoritesPresenter >> defaultLayout [
 		  add: (SpBoxLayout newLeftToRight
 				   vAlignCenter;
 				   spacing: 4;
-				   add: titleLabel;
-				   add: refreshButton expand: false;
-				   add: addButton expand: false;
+				   add: icebergButton expand: false;
+				   addLast: refreshButton expand: false;
+				   addLast: addButton expand: false;
 				   yourself)
 		  expand: false;
 		  add: list;
@@ -118,13 +118,21 @@ FRFavoritesPresenter >> favoritesList [
 	^ list
 ]
 
+{ #category : 'accessing' }
+FRFavoritesPresenter >> icebergButton [
+
+	^ icebergButton
+]
+
 { #category : 'initialization' }
 FRFavoritesPresenter >> initializePresenters [
 
-	titleLabel := self newLabel
-		              label: 'Favorite repositories';
-		              displayBold: [ :text | true ];
-		              yourself.
+	icebergButton := self newButton
+		                 label: 'Iceberg';
+		                 icon: self application icebergIcon;
+		                 help: 'Open Iceberg on all the repositories of the image';
+		                 action: [ self application openIceberg ];
+		                 yourself.
 	refreshButton := self newButton
 		                 icon: (self iconNamed: #refresh);
 		                 help: 'Take the branches from Iceberg and check again what is loaded';

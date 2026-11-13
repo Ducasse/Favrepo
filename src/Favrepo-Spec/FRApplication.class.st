@@ -17,7 +17,7 @@ I am the Spec application of the favorites tool: I open its window and give its 
 
 - `FRApplication new run` (Spec's entry point; it calls `start`, which I override)
 - `store:`, `catalog:`, `loader:`, `beSynchronous` replace the defaults (tests, examples).
-- `browseRepository:` opens the Iceberg repository browser (`repositoryBrowser:` replaces it in tests).
+- `openIceberg` opens Iceberg on all the repositories and `browseRepository:` on one (`icebergOpener:` and `repositoryBrowser:` replace them in tests).
 - `run:titled:`, `inUIProcess:`, `reportFailure:titled:`, `tell:`, `confirm:titled:`, `request:initialAnswer:titled:`.
 
 ```
@@ -33,6 +33,7 @@ See `FRApplication class >> #exampleInMemory` and run `FRApplication class >> #s
 - `loader`: nil means a new `FRFavoriteLoader`.
 - `isSynchronous`: a Boolean.
 - `repositoryBrowser`: nil means open an `IceTipRepositoryBrowser`.
+- `icebergOpener`: nil means `IceTipRepositoriesBrowser ensureIsOpen`.
 
 ### Implementation Points
 
@@ -46,7 +47,8 @@ Class {
 		'catalogProvider',
 		'loader',
 		'isSynchronous',
-		'repositoryBrowser'
+		'repositoryBrowser',
+		'icebergOpener'
 	],
 	#category : 'Favrepo-Spec',
 	#package : 'Favrepo-Spec'
@@ -145,6 +147,19 @@ FRApplication >> confirmSwitchOf: anIceRepository [
 				  openModal ]
 ]
 
+{ #category : 'accessing' }
+FRApplication >> icebergIcon [
+
+	^ IceTipRepositoriesBrowser iconForWorldMenu
+]
+
+{ #category : 'accessing' }
+FRApplication >> icebergOpener: aBlock [
+	"aBlock opens Iceberg's repositories browser (tests record it instead)."
+
+	icebergOpener := aBlock
+]
+
 { #category : 'running' }
 FRApplication >> inUIProcess: aBlock [
 	"Evaluate aBlock in the UI process and answer its value, waiting for it when called from a background load."
@@ -191,6 +206,13 @@ FRApplication >> newLoader [
 		  baselineChooser: [ :names | self chooseBaselineAmong: names ];
 		  switchConfirmer: [ :repository | self confirmSwitchOf: repository ];
 		  yourself
+]
+
+{ #category : 'dialogs' }
+FRApplication >> openIceberg [
+	"Open Iceberg's browser on all the repositories, or bring it to the front."
+
+	(icebergOpener ifNil: [ [ IceTipRepositoriesBrowser ensureIsOpen ] ]) value
 ]
 
 { #category : 'dialogs' }

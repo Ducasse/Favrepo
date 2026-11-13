@@ -141,6 +141,16 @@ FRFavoritesPresenterTest >> testEveryRowShowsTheSameControls [
 ]
 
 { #category : 'tests' }
+FRFavoritesPresenterTest >> testIcebergButtonOpensIceberg [
+
+	| opened |
+	opened := false.
+	application icebergOpener: [ opened := true ].
+	presenter icebergButton click.
+	self assert: opened
+]
+
+{ #category : 'tests' }
 FRFavoritesPresenterTest >> testLoadButtonLoadsTheBranchPickedInTheDropList [
 
 	self pick: 'dev' in: 'Favrepo'.
