@@ -131,16 +131,16 @@ FRFavoritesPresenterTest >> testRowsFollowTheStoreSortedByName [
 ]
 
 { #category : 'tests' }
+FRFavoritesPresenterTest >> testRunOpensOnlyOneWindow [
+
+	application run.
+	application run.
+	self assert: application windows size equals: 1
+]
+
+{ #category : 'tests' }
 FRFavoritesPresenterTest >> testSelectFavoriteNamed [
 
 	presenter selectFavoriteNamed: 'seaside'.
 	self assert: presenter selectedFavorite name equals: 'Seaside'
-]
-
-{ #category : 'tests' }
-FRFavoritesPresenterTest >> testStartOpensOnlyOneWindow [
-
-	application start.
-	application start.
-	self assert: application windows size equals: 1
 ]

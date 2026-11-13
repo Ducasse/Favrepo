@@ -3,7 +3,7 @@ I am the Spec application of the favorites tool: I open its window and give its 
 
 ## Responsibility:
 
-- I open one favorites window at a time: starting me again brings the open window to the front.
+- I open one favorites window at a time: running me again brings the open window to the front (`run` calls my `start`).
 - I give the presenters the store, a fresh catalog of the image and a loader configured to ask its questions through my dialogs.
 - I run loads in the background with a progress bar, and show failures; when synchronous (tests, scripts) I run in place and record failures in `lastFailure`.
 
@@ -15,12 +15,12 @@ I am the Spec application of the favorites tool: I open its window and give its 
 
 ## Public API and Key Messages
 
-- `FRApplication new start`
+- `FRApplication new run` (Spec's entry point; it calls `start`, which I override)
 - `store:`, `catalog:`, `loader:`, `beSynchronous` replace the defaults (tests, examples).
 - `run:titled:`, `inUIProcess:`, `reportFailure:titled:`, `tell:`, `confirm:titled:`, `request:initialAnswer:titled:`.
 
 ```
-FRApplication new start
+FRApplication new run
 ```
 
 See `FRApplication class >> #exampleInMemory` and run `FRApplication class >> #scriptOpenOnThisImage`.
@@ -69,7 +69,7 @@ FRApplication class >> menuCommandOn: aBuilder [
 		order: 2;
 		iconName: #git;
 		help: 'Your favorite Iceberg repositories, shared by all your images';
-		action: [ self new start ]
+		action: [ self new run ]
 ]
 
 { #category : 'script' }
@@ -79,7 +79,7 @@ FRApplication class >> scriptOpenOnThisImage [
 	<example>
 	^ self new
 		  store: FRFavoriteStore exampleInMemory;
-		  start
+		  run
 ]
 
 { #category : 'running' }
