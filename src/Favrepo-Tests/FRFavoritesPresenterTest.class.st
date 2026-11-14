@@ -279,6 +279,18 @@ FRFavoritesPresenterTest >> testRowsFollowTheStoreSortedByName [
 ]
 
 { #category : 'tests' }
+FRFavoritesPresenterTest >> testRowsOfABuiltWindowGetTheirOwnHeight [
+	"Rows have two lines: the table must use the height each row asks for, not its default row height."
+
+	| table |
+	presenter build.
+	table := presenter favoritesList contentView adapter widget.
+	self assert: presenter rows isNotEmpty.
+	1 to: presenter rows size do: [ :index |
+	self assert: (table container rowHeight: index default: table rowHeight) equals: (table dataSource rowHeight: index) ]
+]
+
+{ #category : 'tests' }
 FRFavoritesPresenterTest >> testRunOpensOnlyOneWindow [
 
 	application run.

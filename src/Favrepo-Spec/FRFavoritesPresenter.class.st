@@ -84,8 +84,9 @@ FRFavoritesPresenter >> cloneFavorite: aFavorite [
 { #category : 'initialization' }
 FRFavoritesPresenter >> connectPresenters [
 
-	list whenActivatedDo: [ :selection |
-		selection selectedItem ifNotNil: [ :row | self browseFavorite: row favorite ] ]
+	list whenActivatedDo: [ :selection | selection selectedItem ifNotNil: [ :row | self browseFavorite: row favorite ] ].
+	"Workaround for Spec before pharo-spec/Spec#1982: the list view gives every row the default height, cutting our two-line rows. Remove once the Pharo 14 build has it."
+	list contentView whenBuiltDo: [ list contentView adapter widget beRowNotHomogeneous ]
 ]
 
 { #category : 'layout' }
