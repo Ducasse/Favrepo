@@ -11,8 +11,8 @@ Class {
 { #category : 'helpers' }
 FRFavoritesPresenterTest >> clickBottomBranchOf: aName [
 
-	((presenter rowNamed: aName) presenters detect: [ :each |
-		 (each isKindOf: SpButtonPresenter) and: [ each label = 'define bottom branches' ] ]) click
+	presenter selectFavoriteNamed: aName.
+	(self menuItemNamed: 'Define bottom branch') execute
 ]
 
 { #category : 'helpers' }
@@ -40,6 +40,12 @@ FRFavoritesPresenterTest >> doubleClick: aName [
 ]
 
 { #category : 'helpers' }
+FRFavoritesPresenterTest >> menuItemNamed: aString [
+
+	^ presenter favoritesList actions allCommands detect: [ :each | each name = aString ]
+]
+
+{ #category : 'helpers' }
 FRFavoritesPresenterTest >> pick: aBranch in: aName [
 
 	((presenter rowNamed: aName) presenters detect: [ :each | each isKindOf: SpDropListPresenter ])
@@ -54,11 +60,22 @@ FRFavoritesPresenterTest >> setUp [
 ]
 
 { #category : 'tests' }
+FRFavoritesPresenterTest >> testBottomBranchComesRightAfterRemoveInTheMenu [
+
+	| names |
+	names := presenter favoritesList actions allCommands collect: [ :each | each name ] as: Array.
+	self assert: (names indexOf: 'Define bottom branch') equals: (names indexOf: 'Remove from favorites') + 1
+]
+
+{ #category : 'tests' }
 FRFavoritesPresenterTest >> testBottomBranchNeedsAClone [
 
-	self assert: (presenter rowNamed: 'Favrepo') isBottomBranchEnabled.
-	self deny: (presenter rowNamed: 'Roassal') isBottomBranchEnabled.
-	self deny: (presenter rowNamed: 'Seaside') isBottomBranchEnabled
+	presenter selectFavoriteNamed: 'Favrepo'.
+	self assert: (self menuItemNamed: 'Define bottom branch') canBeExecuted.
+	presenter selectFavoriteNamed: 'Roassal'.
+	self deny: (self menuItemNamed: 'Define bottom branch') canBeExecuted.
+	presenter selectFavoriteNamed: 'Seaside'.
+	self deny: (self menuItemNamed: 'Define bottom branch') canBeExecuted
 ]
 
 { #category : 'tests' }
@@ -164,7 +181,7 @@ FRFavoritesPresenterTest >> testEveryRowShowsTheSameControls [
 	| shapes |
 	shapes := presenter rows collect: [ :row | row layout children collect: [ :each | each class ] as: Array ].
 	self assert: shapes asSet size equals: 1.
-	self assert: ((presenter rowNamed: 'Roassal') layout children count: [ :each | each isKindOf: SpButtonPresenter ]) equals: 3
+	self assert: ((presenter rowNamed: 'Roassal') layout children count: [ :each | each isKindOf: SpButtonPresenter ]) equals: 2
 ]
 
 { #category : 'tests' }

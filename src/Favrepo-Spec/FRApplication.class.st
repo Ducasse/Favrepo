@@ -179,7 +179,7 @@ FRApplication >> report: aString titled: aTitle [
 
 	self newInform
 		title: aTitle;
-		label: aString;
+		message: aString;
 		openModal
 ]
 

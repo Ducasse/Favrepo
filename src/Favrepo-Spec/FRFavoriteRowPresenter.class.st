@@ -1,5 +1,5 @@
 "
-I am one row of the favorites window: initial, name, owner/project, Clone button, branch, Load button, ""define bottom branches"" button (creates `<ISO date>-Bottom` in the clone) and check mark. The same controls are there in every state; a button that cannot be used is dimmed. Code that came with the image without a clone shows as loaded and still offers Clone, to start working on it.
+I am one row of the favorites window: initial, name, owner/project, Clone button, branch, Load button and check mark. The same controls are there in every state; a button that cannot be used is dimmed. Code that came with the image without a clone shows as loaded and still offers Clone, to start working on it.
 
 ## Responsibility:
 
@@ -41,8 +41,7 @@ Class {
 		'loadButton',
 		'loadedLabel',
 		'favoritesPresenter',
-		'cloneButton',
-		'bottomBranchButton'
+		'cloneButton'
 	],
 	#category : 'Favrepo-Spec',
 	#package : 'Favrepo-Spec'
@@ -95,14 +94,6 @@ FRFavoriteRowPresenter >> beLoading [
 	loadButton
 		label: 'Loading';
 		disable
-]
-
-{ #category : 'accessing' }
-FRFavoriteRowPresenter >> bottomBranchHelp [
-
-	^ self isBottomBranchEnabled
-		  ifTrue: [ 'Create and check out the branch <ISO date>-Bottom at the current commit of the clone' ]
-		  ifFalse: [ 'Clone it first' ]
 ]
 
 { #category : 'accessing' }
@@ -165,7 +156,7 @@ FRFavoriteRowPresenter >> connectPresenters [
 
 { #category : 'layout' }
 FRFavoriteRowPresenter >> defaultLayout [
-	"The same controls in every state, so nothing moves: Clone, Load and the bottom branch are dimmed when they cannot be used."
+	"The same controls in every state, so nothing moves: Clone and Load are dimmed when they cannot be used."
 
 	^ SpBoxLayout newLeftToRight
 		  spacing: 8;
@@ -186,10 +177,6 @@ FRFavoriteRowPresenter >> defaultLayout [
 		  add: loadButton withConstraints: [ :constraints |
 			  constraints
 				  width: 60;
-				  height: 26 ];
-		  add: bottomBranchButton withConstraints: [ :constraints |
-			  constraints
-				  width: 160;
 				  height: 26 ];
 		  add: loadedLabel width: 16;
 		  yourself
@@ -244,10 +231,6 @@ FRFavoriteRowPresenter >> initializePresenters [
 		              label: 'Load';
 		              action: [ favoritesPresenter loadFavorite: favorite ];
 		              yourself.
-	bottomBranchButton := self newButton
-		                      label: 'define bottom branches';
-		                      action: [ favoritesPresenter defineBottomBranchOf: favorite ];
-		                      yourself.
 	loadedLabel := self newLabel
 ]
 
@@ -380,10 +363,7 @@ FRFavoriteRowPresenter >> updateButtons [
 		help: self cloneHelp.
 	loadButton
 		enabled: self isLoadEnabled;
-		help: self loadHelp.
-	bottomBranchButton
-		enabled: self isBottomBranchEnabled;
-		help: self bottomBranchHelp
+		help: self loadHelp
 ]
 
 { #category : 'updating' }

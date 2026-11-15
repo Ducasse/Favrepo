@@ -5,7 +5,7 @@ I am the main window of the favorites tool, four rows high and scrolling beyond:
 
 - I rebuild my rows from the favorites file and a fresh catalog of the image on every change.
 - I clone a favorite, load it, change its branch, remove it (no confirmation: only the bookmark goes, and + adds it back) and open the add and edit dialogs.
-- I offer Edit and Remove from favorites (Delete key) in the row context menu; a double-click opens the Iceberg repository browser of a favorite Iceberg has.
+- I offer Edit, Remove from favorites (Delete key) and Define bottom branch (creates and checks out `<ISO date>-Bottom` in the clone) in the row context menu; a double-click opens the Iceberg repository browser of a favorite Iceberg has.
 
 ## Collaborators:
 
@@ -17,7 +17,7 @@ I am the main window of the favorites tool, four rows high and scrolling beyond:
 ## Public API and Key Messages
 
 - `takeBranchesFromIceberg` (the refresh button), `refresh`, `rows`, `rowNamed:`, `selectedFavorite`, `selectFavoriteNamed:`
-- `cloneFavorite:`, `loadFavorite:`, `changeBranch:of:`, `removeFavorite:`, `removeSelectedFavorite`, `browseFavorite:`, `openAddDialog`, `openEditDialogOn:`
+- `cloneFavorite:`, `loadFavorite:`, `changeBranch:of:`, `removeFavorite:`, `removeSelectedFavorite`, `defineBottomBranchOf:`, `browseFavorite:`, `openAddDialog`, `openEditDialogOn:`
 
 See `FRFavoritesPresenter class >> #exampleInMemory` and run `FRFavoritesPresenter class >> #scriptOpenInMemory`.
 "
@@ -56,6 +56,13 @@ FRFavoritesPresenter >> browseFavorite: aFavorite [
 
 	(self application catalog registeredRepositoryFor: aFavorite) ifNotNil: [ :repository |
 		self application browseRepository: repository ]
+]
+
+{ #category : 'testing' }
+FRFavoritesPresenter >> canDefineBottomBranchOfSelection [
+	"Whether the selected favorite has a clone to create a bottom branch in."
+
+	^ self selectedFavorite ifNil: [ false ] ifNotNil: [ :favorite | (self rowNamed: favorite name) isBottomBranchEnabled ]
 ]
 
 { #category : 'actions' }
@@ -159,8 +166,16 @@ FRFavoritesPresenter >> initializePresenters [
 		             action: [ self openAddDialog ];
 		             yourself.
 	list := self instantiate: SpEasyComponentListPresenter.
+	list activateOnDoubleClick.
+	self initializeRowMenu.
+	self refresh
+]
+
+{ #category : 'initialization' }
+FRFavoritesPresenter >> initializeRowMenu [
+	"The context menu of a row: Edit, Remove from favorites, Define bottom branch."
+
 	list
-		activateOnDoubleClick;
 		addActionWith: [ :action |
 				action
 					name: 'Edit…';
@@ -171,8 +186,13 @@ FRFavoritesPresenter >> initializePresenters [
 					name: 'Remove from favorites';
 					shortcutKey: KeyboardKey delete asKeyCombination;
 					actionEnabled: [ self selectedFavorite isNotNil ];
-					action: [ self removeSelectedFavorite ] ].
-	self refresh
+					action: [ self removeSelectedFavorite ] ];
+		addActionWith: [ :action |
+				action
+					name: 'Define bottom branch';
+					description: 'Create and check out the branch <ISO date>-Bottom at the current commit of the clone';
+					actionEnabled: [ self canDefineBottomBranchOfSelection ];
+					action: [ self defineBottomBranchOf: self selectedFavorite ] ]
 ]
 
 { #category : 'initialization' }
