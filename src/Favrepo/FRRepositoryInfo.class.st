@@ -57,7 +57,6 @@ FRRepositoryInfo class >> currentVersionOf: anIceRepository [
 { #category : 'examples' }
 FRRepositoryInfo class >> exampleLoadedOnATag [
 
-	<sampleInstance>
 	^ (self name: 'Microdown' url: 'git@github.com:pillar-markup/Microdown.git')
 		  beCloned;
 		  beLoaded;
@@ -69,7 +68,6 @@ FRRepositoryInfo class >> exampleLoadedOnATag [
 { #category : 'examples' }
 FRRepositoryInfo class >> exampleMissingOnDisk [
 
-	<sampleInstance>
 	^ (self name: 'Roassal' url: nil)
 		  beLoaded;
 		  yourself

@@ -46,7 +46,6 @@ Class {
 FRUpstreamFinder class >> exampleSpec [
 	"A finder that knows where Spec comes from: it answers https://github.com/pharo-spec/Spec.git for any fork of Spec."
 
-	<sampleInstance>
 	^ self knownUrls: #( 'github://pharo-spec/Spec:v2.0.6/src' )
 ]
 

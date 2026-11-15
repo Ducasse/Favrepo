@@ -5,7 +5,7 @@ I am the main window of the favorites tool, four rows high and scrolling beyond:
 
 - I rebuild my rows from the favorites file and a fresh catalog of the image on every change.
 - I clone a favorite, load it, change its branch, remove it (no confirmation: only the bookmark goes, and + adds it back) and open the add and edit dialogs.
-- I offer Edit, Remove from favorites (Delete key) and Define bottom branch (creates and checks out `<ISO date>-Bottom` in the clone) in the row context menu; a double-click opens the Iceberg repository browser of a favorite Iceberg has.
+- I offer Edit, Remove from favorites (Delete key) Define bottom branch (creates and checks out `<ISO date>-Bottom` in the clone), and for Pharo external projects Create Pharo integration branch… and Open Pharo integration PR (see `FRPharoIntegration`) in the row context menu; a double-click opens the Iceberg repository browser of a favorite Iceberg has.
 
 ## Collaborators:
 
@@ -17,7 +17,7 @@ I am the main window of the favorites tool, four rows high and scrolling beyond:
 ## Public API and Key Messages
 
 - `takeBranchesFromIceberg` (the refresh button), `refresh`, `rows`, `rowNamed:`, `selectedFavorite`, `selectFavoriteNamed:`
-- `cloneFavorite:`, `loadFavorite:`, `changeBranch:of:`, `removeFavorite:`, `removeSelectedFavorite`, `defineBottomBranchOf:`, `browseFavorite:`, `openAddDialog`, `openEditDialogOn:`
+- `cloneFavorite:`, `loadFavorite:`, `changeBranch:of:`, `removeFavorite:`, `removeSelectedFavorite`, `defineBottomBranchOf:`, `createPharoIntegrationBranchOf:`, `openPharoIntegrationPullRequestOf:`, `browseFavorite:`, `openAddDialog`, `openEditDialogOn:`
 
 See `FRFavoritesPresenter class >> #exampleInMemory` and run `FRFavoritesPresenter class >> #scriptOpenInMemory`.
 "
@@ -38,7 +38,6 @@ Class {
 FRFavoritesPresenter class >> exampleInMemory [
 	"The favorites presenter of the example application, not opened."
 
-	<sampleInstance>
 	^ FRApplication exampleInMemory instantiate: self
 ]
 
@@ -59,10 +58,27 @@ FRFavoritesPresenter >> browseFavorite: aFavorite [
 ]
 
 { #category : 'testing' }
+FRFavoritesPresenter >> canCreatePharoIntegrationOfSelection [
+	"Whether the selected favorite is a Pharo external project with a clone."
+
+	^ self selectedFavorite ifNil: [ false ] ifNotNil: [ :favorite |
+		  (self rowNamed: favorite name) isBottomBranchEnabled and: [
+			  (self application newPharoIntegrationFor: favorite) isExternalProject ] ]
+]
+
+{ #category : 'testing' }
 FRFavoritesPresenter >> canDefineBottomBranchOfSelection [
 	"Whether the selected favorite has a clone to create a bottom branch in."
 
 	^ self selectedFavorite ifNil: [ false ] ifNotNil: [ :favorite | (self rowNamed: favorite name) isBottomBranchEnabled ]
+]
+
+{ #category : 'testing' }
+FRFavoritesPresenter >> canOpenPharoIntegrationPullRequestOfSelection [
+	"Whether the Pharo clone has the integration branch of the selected favorite."
+
+	^ self canCreatePharoIntegrationOfSelection and: [
+		  (self application newPharoIntegrationFor: self selectedFavorite) hasPharoIntegrationBranch ]
 ]
 
 { #category : 'actions' }
@@ -92,6 +108,27 @@ FRFavoritesPresenter >> connectPresenters [
 	list whenActivatedDo: [ :selection | selection selectedItem ifNotNil: [ :row | self browseFavorite: row favorite ] ].
 	"Workaround for Spec before pharo-spec/Spec#1982: the list view gives every row the default height, cutting our two-line rows. Remove once the Pharo 14 build has it."
 	list contentView whenBuiltDo: [ list contentView adapter widget beRowNotHomogeneous ]
+]
+
+{ #category : 'actions' }
+FRFavoritesPresenter >> createPharoIntegrationBranchOf: aFavorite [
+	"Ask the name of the integration branch, create it in the clone of aFavorite and in Pharo, then tell what was done."
+
+	| name |
+	name := self application
+		        request: ('Name of the branch to create in {1} and in Pharo' format: { aFavorite name })
+		        initialAnswer: ''
+		        titled: 'Pharo integration branch'.
+	name ifNil: [ ^ self ].
+	[
+		self application
+			run: [
+					((self application newPharoIntegrationFor: aFavorite) createBranch: name trimBoth) ifNotNil: [ :report |
+						self application report: report titled: 'Pharo integration branch' ] ]
+			titled: ('Creating the Pharo integration branch {1}' format: { name }) ]
+		on: Error
+		do: [ :error | self application reportFailure: error messageText titled: 'Pharo integration branch not created' ].
+	self refresh
 ]
 
 { #category : 'layout' }
@@ -147,6 +184,26 @@ FRFavoritesPresenter >> icebergButton [
 ]
 
 { #category : 'initialization' }
+FRFavoritesPresenter >> initializePharoIntegrationMenu [
+	"The items to validate a branch of a Pharo external project in the full Pharo build."
+
+	list
+		addActionWith: [ :action |
+				action
+					name: 'Create Pharo integration branch…';
+					description:
+						'Create a branch in this clone and, in your Pharo fork, the same branch loading it from your fork (Pharo external projects only)';
+					actionEnabled: [ self canCreatePharoIntegrationOfSelection ];
+					action: [ self createPharoIntegrationBranchOf: self selectedFavorite ] ];
+		addActionWith: [ :action |
+				action
+					name: 'Open Pharo integration PR';
+					description: 'Open the pull request of the Pharo branch named like the branch of this clone (Pharo external projects only)';
+					actionEnabled: [ self canOpenPharoIntegrationPullRequestOfSelection ];
+					action: [ self openPharoIntegrationPullRequestOf: self selectedFavorite ] ]
+]
+
+{ #category : 'initialization' }
 FRFavoritesPresenter >> initializePresenters [
 
 	icebergButton := self newButton
@@ -173,7 +230,7 @@ FRFavoritesPresenter >> initializePresenters [
 
 { #category : 'initialization' }
 FRFavoritesPresenter >> initializeRowMenu [
-	"The context menu of a row: Edit, Remove from favorites, Define bottom branch."
+	"The context menu of a row: Edit, Remove from favorites, Define bottom branch, and for Pharo external projects the integration branch and its pull request."
 
 	list
 		addActionWith: [ :action |
@@ -192,7 +249,8 @@ FRFavoritesPresenter >> initializeRowMenu [
 					name: 'Define bottom branch';
 					description: 'Create and check out the branch <ISO date>-Bottom at the current commit of the clone';
 					actionEnabled: [ self canDefineBottomBranchOfSelection ];
-					action: [ self defineBottomBranchOf: self selectedFavorite ] ]
+					action: [ self defineBottomBranchOf: self selectedFavorite ] ].
+	self initializePharoIntegrationMenu
 ]
 
 { #category : 'initialization' }
@@ -235,6 +293,23 @@ FRFavoritesPresenter >> openEditDialogOn: aFavorite [
 		beEditing: aFavorite;
 		whenAcceptedDo: [ :favorite | self favoriteAccepted: favorite ];
 		openDialog
+]
+
+{ #category : 'actions' }
+FRFavoritesPresenter >> openPharoIntegrationPullRequestOf: aFavorite [
+	"Open the pull request of the Pharo integration branch of aFavorite, after checking that its branch is on its fork."
+
+	| integration |
+	integration := self application newPharoIntegrationFor: aFavorite.
+	[
+		(integration isIntegrationBranchPushed or: [
+				 self application confirmUnpushed:
+					 ('{1} of {2} is not on your fork with all its commits: the Pharo build cannot load it. Open the pull request anyway?'
+						  format: {
+								  integration integrationBranchName.
+								  aFavorite name }) ]) ifTrue: [ self application openPullRequestFor: integration ] ]
+		on: Error
+		do: [ :error | self application reportFailure: error messageText titled: 'Pharo integration PR' ]
 ]
 
 { #category : 'updating' }

@@ -51,7 +51,6 @@ Class {
 FRFavoriteRowPresenter class >> exampleLoaded [
 	"A row with a check mark: Microdown is loaded, on the tag v2.9.3."
 
-	<sampleInstance>
 	^ (FRApplication exampleInMemory instantiate: self)
 		  setFavorite: (FRFavorite url: 'git@github.com:pillar-markup/Microdown.git') catalog: FRCatalog exampleSmallImage;
 		  yourself
@@ -61,7 +60,6 @@ FRFavoriteRowPresenter class >> exampleLoaded [
 FRFavoriteRowPresenter class >> exampleNotCloned [
 	"A grey row with a Load button: Seaside is not in the small example image."
 
-	<sampleInstance>
 	^ (FRApplication exampleInMemory instantiate: self)
 		  setFavorite: FRFavorite exampleOnDefaultBranch catalog: FRCatalog exampleSmallImage;
 		  yourself

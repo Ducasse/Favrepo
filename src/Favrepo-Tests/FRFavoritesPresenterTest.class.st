@@ -156,6 +156,22 @@ FRFavoritesPresenterTest >> testClonedRowIsGreyAndCanBeLoaded [
 ]
 
 { #category : 'tests' }
+FRFavoritesPresenterTest >> testCreatePharoIntegrationNeedsAClonedExternalProject [
+	"Microdown is a Pharo external project and is cloned; Favrepo is cloned but no external project; Roassal is an external project without clone."
+
+	| item |
+	store add: (FRFavorite url: 'git@github.com:pillar-markup/Microdown.git').
+	presenter refresh.
+	item := self menuItemNamed: 'Create Pharo integration branch…'.
+	presenter selectFavoriteNamed: 'Microdown'.
+	self assert: item canBeExecuted.
+	presenter selectFavoriteNamed: 'Favrepo'.
+	self deny: item canBeExecuted.
+	presenter selectFavoriteNamed: 'Roassal'.
+	self deny: item canBeExecuted
+]
+
+{ #category : 'tests' }
 FRFavoritesPresenterTest >> testDefineBottomBranchOfAClone [
 
 	self clickBottomBranchOf: 'Favrepo'.
@@ -282,6 +298,26 @@ FRFavoritesPresenterTest >> testNotClonedRowIsGreyAndCanOnlyBeCloned [
 	self deny: row isBranchEditable.
 	self deny: row showsCheck.
 	self assert: row stateDescription equals: 'Not cloned'
+]
+
+{ #category : 'tests' }
+FRFavoritesPresenterTest >> testOpenPharoIntegrationPRNeedsTheIntegrationBranch [
+	"The Microdown of the fixture has no clone repository to read the branch from, so there is no integration branch."
+
+	store add: (FRFavorite url: 'git@github.com:pillar-markup/Microdown.git').
+	presenter refresh.
+	presenter selectFavoriteNamed: 'Microdown'.
+	self deny: (self menuItemNamed: 'Open Pharo integration PR') canBeExecuted
+]
+
+{ #category : 'tests' }
+FRFavoritesPresenterTest >> testPharoIntegrationItemsComeAfterDefineBottomBranch [
+
+	| names |
+	names := presenter favoritesList actions allCommands collect: [ :each | each name ] as: Array.
+	self
+		assert: (names copyFrom: (names indexOf: 'Define bottom branch') to: names size)
+		equals: #( 'Define bottom branch' 'Create Pharo integration branch…' 'Open Pharo integration PR' )
 ]
 
 { #category : 'tests' }

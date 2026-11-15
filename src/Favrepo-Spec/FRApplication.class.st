@@ -18,7 +18,7 @@ I am the Spec application of the favorites tool: I open its window and give its 
 - `FRApplication new run` (Spec's entry point; it calls `start`, which I override)
 - `store:`, `catalog:`, `loader:` replace the defaults (tests, examples); `FRTestApplication` records my dialogs in tests.
 - `openIceberg` opens Iceberg on all the repositories and `browseRepository:` on one (`icebergOpener:` and `repositoryBrowser:` replace them in tests).
-- `run:titled:`, `reportFailure:titled:`, `report:titled:`, `tell:`, `request:initialAnswer:titled:`.
+- `run:titled:`, `newPharoIntegrationFor:`, `openPullRequestFor:`, `reportFailure:titled:`, `report:titled:`, `tell:`, `request:initialAnswer:titled:`.
 
 ```
 FRApplication new run
@@ -56,7 +56,6 @@ Class {
 FRApplication class >> exampleInMemory [
 	"An application on example favorites and the small example image; nothing is opened."
 
-	<sampleInstance>
 	^ self new
 		  store: FRFavoriteStore exampleInMemory;
 		  catalog: FRCatalog exampleSmallImage;
@@ -117,12 +116,49 @@ FRApplication >> chooseBaselineAmong: someNames [
 ]
 
 { #category : 'dialogs' }
+FRApplication >> confirmNotBottom: aQuestion [
+
+	^ self newConfirm
+		  title: 'Not a Bottom branch';
+		  label: aQuestion;
+		  acceptLabel: 'Create anyway';
+		  cancelLabel: 'Cancel';
+		  openModal
+]
+
+{ #category : 'dialogs' }
 FRApplication >> confirmSwitchOf: anIceRepository [
 
 	^ self newConfirm
 		  title: 'Uncommitted changes';
 		  label: ('{1} has uncommitted changes. Switch its branch anyway?' format: { anIceRepository name });
 		  openModal
+]
+
+{ #category : 'dialogs' }
+FRApplication >> confirmUnpushed: aQuestion [
+
+	^ self newConfirm
+		  title: 'Branch not pushed';
+		  label: aQuestion;
+		  acceptLabel: 'Open the PR anyway';
+		  cancelLabel: 'Cancel';
+		  openModal
+]
+
+{ #category : 'dialogs' }
+FRApplication >> createPullRequest: aPullRequest [
+	"Create aPullRequest on GitHub and tell where it is."
+
+	| url |
+	url := [ aPullRequest send at: 'html_url' ]
+		       on: IceGitHubError
+		       do: [ :error | ^ self reportFailure: error messageText titled: 'The pull request was not created' ].
+	self newInform
+		title: 'Pull request created. Click to view on GitHub.';
+		label: url;
+		onAccept: [ WebBrowser openOn: url ];
+		openModal
 ]
 
 { #category : 'accessing' }
@@ -166,11 +202,32 @@ FRApplication >> newLoader [
 		  yourself
 ]
 
+{ #category : 'accessing' }
+FRApplication >> newPharoIntegrationFor: aFavorite [
+	"The Pharo integration of aFavorite, asking through my dialogs before building on a branch that is not a bottom branch."
+
+	^ (FRPharoIntegration favorite: aFavorite catalog: self catalog)
+		  confirmer: [ :question | self confirmNotBottom: question ];
+		  yourself
+]
+
 { #category : 'dialogs' }
 FRApplication >> openIceberg [
 	"Open Iceberg's browser on all the repositories, or bring it to the front."
 
 	(icebergOpener ifNil: [ [ IceTipRepositoriesBrowser ensureIsOpen ] ]) value
+]
+
+{ #category : 'dialogs' }
+FRApplication >> openPullRequestFor: aPharoIntegration [
+	"Open Iceberg's GitHub pull request dialog from the integration branch of the Pharo fork."
+
+	(FRPharoPullRequestPresenter
+		 newApplication: self
+		 repository: aPharoIntegration checkedPharoRepository
+		 branch: aPharoIntegration integrationPharoBranch)
+		onAccept: [ :pullRequest | self createPullRequest: pullRequest ];
+		openModal
 ]
 
 { #category : 'dialogs' }

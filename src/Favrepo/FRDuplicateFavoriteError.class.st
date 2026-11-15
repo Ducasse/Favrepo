@@ -32,7 +32,6 @@ Class {
 { #category : 'examples' }
 FRDuplicateFavoriteError class >> exampleMustache [
 
-	<sampleInstance>
 	^ self new
 		  favorite: FRFavorite exampleMustache;
 		  messageText: 'Mustache is already a favorite';

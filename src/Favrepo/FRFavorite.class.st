@@ -54,14 +54,12 @@ FRFavorite class >> defaultBranch [
 { #category : 'examples' }
 FRFavorite class >> exampleMustache [
 
-	<sampleInstance>
 	^ self url: 'git@github.com:noha/mustache.git' name: 'Mustache' branch: 'v1.3'
 ]
 
 { #category : 'examples' }
 FRFavorite class >> exampleOnDefaultBranch [
 
-	<sampleInstance>
 	^ self url: 'https://github.com/SeasideSt/Seaside'
 ]
 

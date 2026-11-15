@@ -76,7 +76,6 @@ FRFavoriteStore class >> defaultFile [
 FRFavoriteStore class >> exampleInMemory [
 	"A store in a memory file system, so your real favorites file is never touched."
 
-	<sampleInstance>
 	^ (self on: FileSystem memory root / 'iceberg-favorites.ston')
 		  add: FRFavorite exampleMustache;
 		  add: FRFavorite exampleOnDefaultBranch;

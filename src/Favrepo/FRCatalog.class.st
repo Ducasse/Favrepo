@@ -57,7 +57,6 @@ FRCatalog class >> current [
 FRCatalog class >> exampleSmallImage [
 	"An image with a loaded Microdown, a Roassal missing on disk and a cloned but unloaded Favrepo."
 
-	<sampleInstance>
 	^ self withAll: {
 			  FRRepositoryInfo exampleLoadedOnATag.
 			  FRRepositoryInfo exampleMissingOnDisk.

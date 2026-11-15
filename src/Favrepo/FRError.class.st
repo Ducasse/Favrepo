@@ -28,7 +28,6 @@ Class {
 { #category : 'examples' }
 FRError class >> exampleNoBaseline [
 
-	<sampleInstance>
 	^ self new
 		  messageText: 'No baseline in /tmp/clone/src';
 		  yourself

@@ -44,7 +44,6 @@ Class {
 FRAddFavoritePresenter class >> exampleEditing [
 	"The edit dialog presenter on Mustache: no repository list."
 
-	<sampleInstance>
 	^ (FRApplication exampleInMemory instantiate: self)
 		  beEditing: FRFavorite exampleMustache;
 		  yourself
@@ -54,7 +53,6 @@ FRAddFavoritePresenter class >> exampleEditing [
 FRAddFavoritePresenter class >> exampleInMemory [
 	"The add dialog presenter, listing the small example image's repositories that are not favorites yet."
 
-	<sampleInstance>
 	^ FRApplication exampleInMemory instantiate: self
 ]
 

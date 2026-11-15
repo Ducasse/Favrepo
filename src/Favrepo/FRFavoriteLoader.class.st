@@ -49,7 +49,6 @@ Class {
 FRFavoriteLoader class >> exampleOnSmallImage [
 	"A loader that sees the small example image; it loads nothing until sent #load:."
 
-	<sampleInstance>
 	^ self new
 		  catalog: FRCatalog exampleSmallImage;
 		  baselineChooser: [ :names | names first ];
