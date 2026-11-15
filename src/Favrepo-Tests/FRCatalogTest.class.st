@@ -72,6 +72,26 @@ FRCatalogTest >> testClonedRepositoryWithNothingLoadedGivesClonedState [
 ]
 
 { #category : 'tests' }
+FRCatalogTest >> testFavoriteIsFoundByTheCloneItWasAttachedTo [
+	"A fork attached to the image's Spec2 keeps the name Spec2 in Iceberg; the favorite spec finds it by its clone folder."
+
+	| clones spec catalog |
+	clones := FileSystem memory root / 'iceberg'.
+	spec := (FRRepositoryInfo name: 'Spec2' url: 'git@github.com:Ducasse/spec.git')
+		        beCloned;
+		        beLoaded;
+		        iceRepository: (IceLibgitRepository new
+				         name: 'Spec2';
+				         location: clones / 'Ducasse' / 'spec';
+				         yourself);
+		        yourself.
+	catalog := (FRCatalog withAll: { spec })
+		           clonesLocation: clones;
+		           yourself.
+	self assert: (catalog stateOf: (FRFavorite url: 'git@github.com:Ducasse/spec.git')) equals: #loaded
+]
+
+{ #category : 'tests' }
 FRCatalogTest >> testInfoNamedAnswersNilWhenAbsent [
 
 	self assert: (self catalog infoNamed: 'Seaside') isNil

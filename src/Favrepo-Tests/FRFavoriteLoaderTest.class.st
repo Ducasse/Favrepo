@@ -48,6 +48,18 @@ FRFavoriteLoaderTest >> mustache [
 	^ FRFavorite url: 'git@github.com:noha/mustache.git' name: 'Mustache' branch: 'v1.3'
 ]
 
+{ #category : 'helpers' }
+FRFavoriteLoaderTest >> repositoryNamed: aName packages: someNames [
+	"An Iceberg repository missing on disk and not registered, holding packages named someNames (loaded when the image has them)."
+
+	| repository |
+	repository := IceLibgitRepository new
+		              name: aName;
+		              yourself.
+	someNames do: [ :each | repository workingCopy addPackage: (IcePackage named: each repository: repository) ].
+	^ repository
+]
+
 { #category : 'running' }
 FRFavoriteLoaderTest >> setUp [
 
@@ -79,6 +91,46 @@ FRFavoriteLoaderTest >> testChooserCancelRaisesError [
 	loader := self loader.
 	loader baselineChooser: [ :names | nil ].
 	self should: [ loader baselineToLoadIn: clone ] raise: FRError
+]
+
+{ #category : 'tests - attaching' }
+FRFavoriteLoaderTest >> testCloneAttachesToNothingWhenItHoldsNoLoadedPackage [
+	"Sharing only packages that are not in the image does not count."
+
+	| clone unloaded |
+	clone := self repositoryNamed: 'new-project' packages: #( 'NotLoaded-FRFixture' 'Favrepo' ).
+	unloaded := self repositoryNamed: 'Unloaded' packages: #( 'NotLoaded-FRFixture' ).
+	self assert: (self loader repositoryLoadedFrom: clone among: { unloaded }) isNil
+]
+
+{ #category : 'tests - attaching' }
+FRFavoriteLoaderTest >> testCloneAttachesToTheRepositoryItCoversBest [
+	"The image's pharo repository lists the Spec2 packages too; a Spec fork must take over Spec2, whose loaded packages it holds all, not pharo."
+
+	| clone spec pharo |
+	clone := self repositoryNamed: 'spec' packages: #( 'Favrepo' 'Favrepo-Spec' ).
+	spec := self repositoryNamed: 'Spec2' packages: #( 'Favrepo' 'Favrepo-Spec' ).
+	pharo := self repositoryNamed: 'pharo' packages: #( 'Favrepo' 'Favrepo-Spec' 'Favrepo-Tests' 'Kernel' ).
+	self
+		assert: (self loader repositoryLoadedFrom: clone among: {
+					 pharo.
+					 spec })
+		identicalTo: spec
+]
+
+{ #category : 'tests - attaching' }
+FRFavoriteLoaderTest >> testCloneAttachesToTheRepositoryWhoseLoadedPackagesItHolds [
+	"The fork of a project that came with the image takes over its loaded packages."
+
+	| clone loaded other |
+	clone := self repositoryNamed: 'favrepo-fork' packages: #( 'Favrepo' 'Favrepo-Spec' ).
+	loaded := self repositoryNamed: 'Favrepo' packages: #( 'Favrepo' 'Favrepo-Spec' ).
+	other := self repositoryNamed: 'Other' packages: #( 'Favrepo-Tests' ).
+	self
+		assert: (self loader repositoryLoadedFrom: clone among: {
+					 other.
+					 loaded })
+		identicalTo: loaded
 ]
 
 { #category : 'tests' }

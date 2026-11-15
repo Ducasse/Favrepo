@@ -105,11 +105,21 @@ FRCatalog >> diskInfos [
 	^ diskInfos ifNil: [ diskInfos := Dictionary new ]
 ]
 
+{ #category : 'private' }
+FRCatalog >> infoClonedAtFolderOf: aFavorite [
+	"The registered repository whose clone is aFavorite's folder in the clones location, or nil."
+
+	| directory |
+	(clonesLocation isNil or: [ (FRFavorite isValidUrl: aFavorite url) not ]) ifTrue: [ ^ nil ].
+	directory := aFavorite cloneDirectoryIn: clonesLocation.
+	^ infos detect: [ :each | each isClonedAt: directory ] ifNone: [ nil ]
+]
+
 { #category : 'accessing' }
 FRCatalog >> infoFor: aFavorite [
-	"The repository of aFavorite registered in Iceberg, else its clone left on disk, else nil."
+	"The repository registered in Iceberg on the clone folder of aFavorite (a fork attached to the code of the image keeps the image's repository name), else the one named like aFavorite, else its clone left on disk, else nil."
 
-	^ (self infoNamed: aFavorite name) ifNil: [ self infoOnDiskFor: aFavorite ]
+	^ (self infoClonedAtFolderOf: aFavorite) ifNil: [ (self infoNamed: aFavorite name) ifNil: [ self infoOnDiskFor: aFavorite ] ]
 ]
 
 { #category : 'accessing' }

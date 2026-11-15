@@ -196,6 +196,13 @@ FRRepositoryInfo >> isCloned [
 ]
 
 { #category : 'testing' }
+FRRepositoryInfo >> isClonedAt: aDirectory [
+	"Whether my repository's clone is aDirectory."
+
+	^ isCloned and: [ iceRepository isNotNil and: [ iceRepository location = aDirectory ] ]
+]
+
+{ #category : 'testing' }
 FRRepositoryInfo >> isLoaded [
 
 	^ isLoaded

@@ -4,6 +4,7 @@ I load a favorite into the image in one go: clone, find the baseline, load it wi
 ## Responsibility:
 
 - I clone the favorite with Iceberg at its branch or tag, register a clone left on disk (after Iceberg's Forget), or reuse its registered clone and switch it to that branch (asking first when the clone has uncommitted changes).
+- When the clone holds code the image already has from a repository without clone (one that came with the image, such as Spec2 for a fork of Spec), I attach the clone to that repository instead of registering it apart, and check out a branch `image-<commit>` at the commit the image was loaded from, without loading anything: the image and the clone are in sync, and commits go to the clone's remote (your fork).
 - I find the source folder from the `.project` file and the `BaselineOf` packages in it; I ask which one to load when there are several.
 - I load the `default` group with `Metacello`, keeping the projects already loaded (`onConflictUseLoaded`).
 
@@ -17,6 +18,7 @@ I load a favorite into the image in one go: clone, find the baseline, load it wi
 ## Public API and Key Messages
 
 - `clone: aFavorite` only clones (or registers a clone left on disk) and answers the Iceberg repository.
+- `repositoryLoadedFrom: aClone among: someRepositories` answers the repository whose loaded packages the clone holds best; `attach:to:` and `syncCloneWithImageOf:` do the attaching.
 - `load: aFavorite` answers the Iceberg repository; raises `FRError` when there is no baseline or the user cancels.
 - `catalog:`, `baselineChooser:`, `switchConfirmer:`, `clonesLocation:` (Iceberg's clone folder by default) configure me.
 - `baselineNamesIn:`, `sourceDirectoryOf:`, `metacelloRepositoryFor:`, `commitishFor:`, `cloneDirectoryFor:`, `existingCloneFor:` are the steps, testable without network.
@@ -49,6 +51,17 @@ FRFavoriteLoader class >> exampleOnSmallImage [
 		  catalog: FRCatalog exampleSmallImage;
 		  baselineChooser: [ :names | names first ];
 		  yourself
+]
+
+{ #category : 'attaching' }
+FRFavoriteLoader >> attach: aClone to: aLoadedRepository [
+	"Make aLoadedRepository, whose code is in the image, work on the clone of aClone, then put the clone on the commit the image was loaded from. Committing then goes to aClone's remote (a fork, for pull requests)."
+
+	aLoadedRepository location: aClone location.
+	aClone free.
+	self syncCloneWithImageOf: aLoadedRepository.
+	Iceberg announcer announce: (IceRepositoryModified for: aLoadedRepository).
+	^ aLoadedRepository
 ]
 
 { #category : 'accessing' }
@@ -96,19 +109,17 @@ FRFavoriteLoader >> catalog: aCatalog [
 
 { #category : 'steps' }
 FRFavoriteLoader >> clone: aFavorite [
-	"Register the clone left on disk if there is one, otherwise clone aFavorite at its branch or tag."
+	"Register the clone left on disk if there is one, otherwise clone aFavorite at its branch or tag. A clone of code the image already has (a fork of a project that came with the image) takes over that code instead of being registered apart."
 
 	| creator repository |
-	(self existingCloneFor: aFavorite) ifNotNil: [ :directory |
-		^ self register: directory for: aFavorite ].
+	(self existingCloneFor: aFavorite) ifNotNil: [ :directory | ^ self register: directory for: aFavorite ].
 	creator := IceRepositoryCreator new
 		           remote: (IceGitRemote url: aFavorite url);
 		           location: (self cloneDirectoryFor: aFavorite);
 		           yourself.
 	(self commitishFor: aFavorite) ifNotNil: [ :commitish | creator commitishName: commitish ].
 	repository := creator createRepository.
-	repository register.
-	^ repository
+	^ self registerOrAttach: repository
 ]
 
 { #category : 'steps' }
@@ -149,6 +160,13 @@ FRFavoriteLoader >> existingCloneFor: aFavorite [
 	^ directory
 ]
 
+{ #category : 'attaching' }
+FRFavoriteLoader >> imageBranchNameFor: aCommit [
+	"The branch created at the commit the image code comes from."
+
+	^ 'image-' , aCommit shortId
+]
+
 { #category : 'initialization' }
 FRFavoriteLoader >> initialize [
 
@@ -182,14 +200,32 @@ FRFavoriteLoader >> metacelloRepositoryFor: aCloneDirectory [
 
 { #category : 'steps' }
 FRFavoriteLoader >> register: aCloneDirectory for: aFavorite [
-	"Add the clone in aCloneDirectory to Iceberg, then put it on the favorite's branch."
+	"Add the clone in aCloneDirectory to Iceberg, then put it on the favorite's branch; when it holds code the image already has, attach it to that code instead."
 
 	| repository |
 	repository := IceRepositoryCreator new
 		              location: aCloneDirectory;
 		              createRepository.
+	(self repositoryLoadedFrom: repository among: self repositoriesToAttach) ifNotNil: [ :loaded |
+		^ self attach: repository to: loaded ].
 	repository register.
 	^ self switch: repository to: aFavorite
+]
+
+{ #category : 'attaching' }
+FRFavoriteLoader >> registerOrAttach: aClone [
+	"Register aClone in Iceberg, unless it holds code that the image loaded from a repository without clone: that repository then takes aClone over."
+
+	(self repositoryLoadedFrom: aClone among: self repositoriesToAttach) ifNotNil: [ :loaded | ^ self attach: aClone to: loaded ].
+	aClone register.
+	^ aClone
+]
+
+{ #category : 'attaching' }
+FRFavoriteLoader >> repositoriesToAttach [
+	"The repositories Iceberg has registered without clone: the ones that came with the image, whose code is loaded."
+
+	^ IceRepository registry select: [ :each | each isMissing ]
 ]
 
 { #category : 'steps' }
@@ -202,6 +238,35 @@ FRFavoriteLoader >> repositoryFor: aFavorite [
 	(info iceRepository isNotNil and: [ (IceRepository registry includes: info iceRepository) not ]) ifTrue: [
 		^ self register: info iceRepository location for: aFavorite ].
 	^ self switch: info iceRepository to: aFavorite
+]
+
+{ #category : 'attaching' }
+FRFavoriteLoader >> repositoryLoadedFrom: aClone among: someRepositories [
+	"The repository among someRepositories whose loaded packages aClone holds best (the most covered, then the most packages), or nil when aClone holds none of their loaded packages."
+
+	| cloneNames best bestScore |
+	cloneNames := aClone workingCopy packageNames asSet.
+	best := nil.
+	bestScore := { 0. 0 }.
+	someRepositories do: [ :each |
+			| loadedNames held score |
+			loadedNames := each workingCopy packages select: [ :package | package isLoaded ] thenCollect: [ :package | package name ].
+			held := loadedNames count: [ :name | cloneNames includes: name ].
+			score := {
+				         (held / (loadedNames size max: 1)).
+				         held }.
+			(held > 0 and: [ self score: score isBetterThan: bestScore ]) ifTrue: [
+					best := each.
+					bestScore := score ] ].
+	^ best
+]
+
+{ #category : 'attaching' }
+FRFavoriteLoader >> score: aScore isBetterThan: anotherScore [
+	"Scores are {coverage. count}; compare the coverage first, then the count."
+
+	aScore first = anotherScore first ifFalse: [ ^ aScore first > anotherScore first ].
+	^ aScore second > anotherScore second
 ]
 
 { #category : 'baselines' }
@@ -237,4 +302,20 @@ FRFavoriteLoader >> switchConfirmer: aBlock [
 	"aBlock receives a clone with uncommitted changes and answers whether to switch its branch anyway."
 
 	switchConfirmer := aBlock
+]
+
+{ #category : 'attaching' }
+FRFavoriteLoader >> syncCloneWithImageOf: aRepository [
+	"Without loading anything, check out a branch at the commit the image code comes from, so that the image and the clone have no difference. When the clone does not know that commit (a fork not up to date), keep its branch: the image differences show as changes."
+
+	| commit branchName |
+	commit := aRepository lookupCommit: aRepository workingCopy referenceCommit id.
+	commit isUnknownCommit ifTrue: [
+			aRepository branch switch.
+			^ self ].
+	branchName := self imageBranchNameFor: commit.
+	(aRepository hasLocalBranchNamed: branchName)
+		ifTrue: [ (aRepository branchNamed: branchName) switch ]
+		ifFalse: [ aRepository createBranch: branchName inCommit: commit ].
+	commit adopt
 ]
