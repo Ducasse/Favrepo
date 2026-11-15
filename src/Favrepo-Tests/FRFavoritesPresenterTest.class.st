@@ -104,6 +104,13 @@ FRFavoritesPresenterTest >> testCloneButtonOfABuiltWindowOnlyClones [
 ]
 
 { #category : 'tests' }
+FRFavoritesPresenterTest >> testCloneOfALoadedRowWithoutClone [
+
+	self clickCloneOf: 'Roassal'.
+	self assert: (loader cloned collect: [ :each | each name ] as: Array) equals: #( 'Roassal' )
+]
+
+{ #category : 'tests' }
 FRFavoritesPresenterTest >> testClonedRowIsGreyAndCanBeLoaded [
 
 	| row |
@@ -187,7 +194,9 @@ FRFavoritesPresenterTest >> testLoadUsesTheLoader [
 FRFavoritesPresenterTest >> testLoadedRowIsNotGreyAndShowsCheck [
 
 	| row |
-	row := presenter rowNamed: 'Roassal'.
+	store add: (FRFavorite url: 'git@github.com:pillar-markup/Microdown.git').
+	presenter refresh.
+	row := presenter rowNamed: 'Microdown'.
 	self deny: row isGrey.
 	self deny: row isCloneEnabled.
 	self deny: row isLoadEnabled.
@@ -203,6 +212,18 @@ FRFavoritesPresenterTest >> testLoadedRowShowsCheckedOutBranchAndCannotChangeIt 
 	row := presenter rowNamed: 'Microdown'.
 	self assert: row selectedBranch equals: 'v2.9.3'.
 	self deny: row isBranchEditable
+]
+
+{ #category : 'tests' }
+FRFavoritesPresenterTest >> testLoadedRowWithoutCloneOffersClone [
+	"Roassal came with the image: loaded, but cloning it is how one starts working on it."
+
+	| row |
+	row := presenter rowNamed: 'Roassal'.
+	self deny: row isGrey.
+	self assert: row showsCheck.
+	self assert: row isCloneEnabled.
+	self deny: row isLoadEnabled
 ]
 
 { #category : 'tests' }

@@ -113,13 +113,25 @@ FRCatalogTest >> testIsLoaded [
 { #category : 'tests' }
 FRCatalogTest >> testLoadedRepositoryGivesLoadedState [
 
-	self assert: (self catalog stateOf: (self favoriteNamed: 'Roassal')) equals: #loaded
+	| catalog |
+	catalog := FRCatalog withAll: { ((FRRepositoryInfo name: 'Microdown' url: 'git@github.com:pillar-markup/Microdown.git')
+			            beCloned;
+			            beLoaded;
+			            yourself) }.
+	self assert: (catalog stateOf: (FRFavorite url: 'git@github.com:pillar-markup/Microdown.git')) equals: #loaded
+]
+
+{ #category : 'tests' }
+FRCatalogTest >> testLoadedRepositoryWithoutCloneGivesLoadedWithoutCloneState [
+	"Roassal came with the image: its code is loaded but there is no clone to work on."
+
+	self assert: (self catalog stateOf: (self favoriteNamed: 'Roassal')) equals: #loadedWithoutClone
 ]
 
 { #category : 'tests' }
 FRCatalogTest >> testMatchingIgnoresCase [
 
-	self assert: (self catalog stateOf: (self favoriteNamed: 'roassal')) equals: #loaded
+	self assert: (self catalog stateOf: (self favoriteNamed: 'roassal')) equals: #loadedWithoutClone
 ]
 
 { #category : 'tests' }
@@ -133,7 +145,7 @@ FRCatalogTest >> testNoCloneOnDiskIsNotCloned [
 { #category : 'tests' }
 FRCatalogTest >> testSameNameTwiceIsLoadedWhenOneIsLoaded [
 
-	self assert: (self catalog stateOf: (self favoriteNamed: 'tonel')) equals: #loaded
+	self assert: (self catalog stateOf: (self favoriteNamed: 'tonel')) equals: #loadedWithoutClone
 ]
 
 { #category : 'tests' }

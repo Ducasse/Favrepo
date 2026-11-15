@@ -4,7 +4,7 @@ I am the view of the current image used by the favorites tool: the repositories 
 ## Responsibility:
 
 - I match a favorite with a repository of the image by name, ignoring case; a loaded repository wins when a name is registered twice.
-- I answer the state of a favorite: `#loaded`, `#cloned` (in the image, nothing loaded) or `#notCloned`.
+- I answer the state of a favorite: `#loaded`, `#loadedWithoutClone` (came with the image, no clone), `#cloned` (in the image, nothing loaded) or `#notCloned`.
 - I find the clone of a favorite left in Iceberg's folder (`<owner>/<project>`) after Forget, and read its branches without registering it.
 - I list the repositories that are not favorites yet, for the add dialog.
 
@@ -154,8 +154,9 @@ FRCatalog >> infos [
 
 { #category : 'testing' }
 FRCatalog >> isLoaded: aFavorite [
+	"Whether the code of aFavorite is in the image, with or without a clone."
 
-	^ (self stateOf: aFavorite) = #loaded
+	^ #( #loaded #loadedWithoutClone ) includes: (self stateOf: aFavorite)
 ]
 
 { #category : 'accessing' }
@@ -173,12 +174,15 @@ FRCatalog >> setInfos: anArray [
 
 { #category : 'accessing' }
 FRCatalog >> stateOf: aFavorite [
-	"#loaded, #cloned (in the image, nothing loaded) or #notCloned."
+	"#loaded, #loadedWithoutClone (its code came with the image, there is no clone to work on), #cloned (in the image, nothing loaded) or #notCloned."
 
 	| info |
 	info := self infoFor: aFavorite.
 	info ifNil: [ ^ #notCloned ].
-	info isLoaded ifTrue: [ ^ #loaded ].
+	info isLoaded ifTrue: [
+			^ info isCloned
+				  ifTrue: [ #loaded ]
+				  ifFalse: [ #loadedWithoutClone ] ].
 	^ info isCloned
 		  ifTrue: [ #cloned ]
 		  ifFalse: [ #notCloned ]

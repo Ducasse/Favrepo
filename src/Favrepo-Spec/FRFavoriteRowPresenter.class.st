@@ -1,5 +1,5 @@
 "
-I am one row of the favorites window: initial, name, owner/project, Clone button, branch, Load button and check mark. The same controls are there in every state; a button that cannot be used is dimmed.
+I am one row of the favorites window: initial, name, owner/project, Clone button, branch, Load button and check mark. The same controls are there in every state; a button that cannot be used is dimmed. Code that came with the image without a clone shows as loaded and still offers Clone, to start working on it.
 
 ## Responsibility:
 
@@ -242,8 +242,9 @@ FRFavoriteRowPresenter >> isBranchEditable [
 
 { #category : 'testing' }
 FRFavoriteRowPresenter >> isCloneEnabled [
+	"Clone when there is no clone yet, even when the code came with the image: cloning is how one starts working on it."
 
-	^ state = #notCloned
+	^ #( #notCloned #loadedWithoutClone ) includes: state
 ]
 
 { #category : 'testing' }
@@ -261,7 +262,7 @@ FRFavoriteRowPresenter >> isLoadEnabled [
 { #category : 'testing' }
 FRFavoriteRowPresenter >> isLoaded [
 
-	^ state = #loaded
+	^ #( #loaded #loadedWithoutClone ) includes: state
 ]
 
 { #category : 'accessing' }
@@ -274,7 +275,7 @@ FRFavoriteRowPresenter >> isLoading [
 FRFavoriteRowPresenter >> loadHelp [
 
 	state = #notCloned ifTrue: [ ^ 'Clone it first' ].
-	state = #loaded ifTrue: [ ^ 'Already loaded' ].
+	self isLoaded ifTrue: [ ^ 'Already loaded' ].
 	^ 'Load the baseline of this branch'
 ]
 
@@ -331,6 +332,7 @@ FRFavoriteRowPresenter >> state [
 FRFavoriteRowPresenter >> stateDescription [
 
 	state = #loaded ifTrue: [ ^ 'Loaded' ].
+	state = #loadedWithoutClone ifTrue: [ ^ 'Loaded with the image, not cloned: clone it to work on it' ].
 	state = #cloned ifTrue: [ ^ 'Cloned, not loaded' ].
 	^ 'Not cloned'
 ]
