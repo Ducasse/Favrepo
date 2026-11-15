@@ -67,6 +67,28 @@ FRFavoriteLoaderTest >> setUp [
 	fileSystem := FileSystem memory
 ]
 
+{ #category : 'tests - attaching' }
+FRFavoriteLoaderTest >> testAttachReportNamesTheImageBranchAndTheUpstream [
+
+	| report |
+	report := self loader
+		          attachReportFor: (self repositoryNamed: 'Spec2' packages: #(  ))
+		          branch: 'image-ebc98f0'
+		          upstream: 'https://github.com/pharo-spec/Spec.git'.
+	self assert: (report includesSubstring: 'Spec2').
+	self assert: (report includesSubstring: 'image-ebc98f0').
+	self assert: (report includesSubstring: 'https://github.com/pharo-spec/Spec.git')
+]
+
+{ #category : 'tests - attaching' }
+FRFavoriteLoaderTest >> testAttachReportWithoutImageCommitSaysTheImageChangesShow [
+
+	| report |
+	report := self loader attachReportFor: (self repositoryNamed: 'Spec2' packages: #(  )) branch: nil upstream: nil.
+	self assert: (report includesSubstring: 'not found').
+	self assert: (report includesSubstring: 'No upstream')
+]
+
 { #category : 'tests' }
 FRFavoriteLoaderTest >> testBaselineNamesFindsFileTreePackages [
 

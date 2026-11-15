@@ -5,7 +5,7 @@ I am the Spec application of the favorites tool: I open its window and give its 
 
 - I open one favorites window at a time: running me again brings the open window to the front (`run` calls my `start`).
 - I give the presenters the store, a fresh catalog of the image and a loader configured to ask its questions through my dialogs.
-- I run loads in the background with a progress bar, and show failures; when synchronous (tests, scripts) I run in place and record failures in `lastFailure`.
+- I run clones and loads with a progress bar, show failures, and show what the loader reports.
 
 ## Collaborators:
 
@@ -16,9 +16,9 @@ I am the Spec application of the favorites tool: I open its window and give its 
 ## Public API and Key Messages
 
 - `FRApplication new run` (Spec's entry point; it calls `start`, which I override)
-- `store:`, `catalog:`, `loader:`, `beSynchronous` replace the defaults (tests, examples).
+- `store:`, `catalog:`, `loader:` replace the defaults (tests, examples); `FRTestApplication` records my dialogs in tests.
 - `openIceberg` opens Iceberg on all the repositories and `browseRepository:` on one (`icebergOpener:` and `repositoryBrowser:` replace them in tests).
-- `run:titled:`, `inUIProcess:`, `reportFailure:titled:`, `tell:`, `confirm:titled:`, `request:initialAnswer:titled:`.
+- `run:titled:`, `reportFailure:titled:`, `report:titled:`, `tell:`, `request:initialAnswer:titled:`.
 
 ```
 FRApplication new run
@@ -31,7 +31,6 @@ See `FRApplication class >> #exampleInMemory` and run `FRApplication class >> #s
 - `store`: nil means `FRFavoriteStore default`.
 - `catalogProvider`: nil means a new `FRCatalog current` on each request.
 - `loader`: nil means a new `FRFavoriteLoader`.
-- `isSynchronous`: a Boolean.
 - `repositoryBrowser`: nil means open an `IceTipRepositoryBrowser`.
 - `icebergOpener`: nil means `IceTipRepositoriesBrowser ensureIsOpen`.
 
@@ -46,7 +45,6 @@ Class {
 		'store',
 		'catalogProvider',
 		'loader',
-		'isSynchronous',
 		'repositoryBrowser',
 		'icebergOpener'
 	],
@@ -87,13 +85,6 @@ FRApplication class >> scriptOpenOnThisImage [
 		  run
 ]
 
-{ #category : 'running' }
-FRApplication >> beSynchronous [
-	"Run loads in the calling process and record failures instead of showing them; used by tests and scripts."
-
-	isSynchronous := true
-]
-
 { #category : 'dialogs' }
 FRApplication >> browseRepository: anIceRepository [
 	"Open the Iceberg repository browser on anIceRepository."
@@ -118,33 +109,20 @@ FRApplication >> catalog: aCatalog [
 { #category : 'dialogs' }
 FRApplication >> chooseBaselineAmong: someNames [
 
-	^ self inUIProcess: [
-			  self newSelect
-				  title: 'Several baselines';
-				  label: 'Which baseline should be loaded?';
-				  items: someNames;
-				  openModal ]
-]
-
-{ #category : 'dialogs' }
-FRApplication >> confirm: aString titled: aTitle [
-	"Ask a yes/no question; always yes when running synchronously."
-
-	isSynchronous ifTrue: [ ^ true ].
-	^ self newConfirm
-		  title: aTitle;
-		  message: aString;
+	^ self newSelect
+		  title: 'Several baselines';
+		  label: 'Which baseline should be loaded?';
+		  items: someNames;
 		  openModal
 ]
 
 { #category : 'dialogs' }
 FRApplication >> confirmSwitchOf: anIceRepository [
 
-	^ self inUIProcess: [
-			  self newConfirm
-				  title: 'Uncommitted changes';
-				  label: ('{1} has uncommitted changes. Switch its branch anyway?' format: { anIceRepository name });
-				  openModal ]
+	^ self newConfirm
+		  title: 'Uncommitted changes';
+		  label: ('{1} has uncommitted changes. Switch its branch anyway?' format: { anIceRepository name });
+		  openModal
 ]
 
 { #category : 'accessing' }
@@ -160,35 +138,14 @@ FRApplication >> icebergOpener: aBlock [
 	icebergOpener := aBlock
 ]
 
-{ #category : 'running' }
-FRApplication >> inUIProcess: aBlock [
-	"Evaluate aBlock in the UI process and answer its value, waiting for it when called from a background load."
-
-	| result done |
-	(isSynchronous or: [ Processor activeProcess == UIManager default uiProcess ]) ifTrue: [ ^ aBlock value ].
-	result := nil.
-	done := Semaphore new.
-	self defer: [ result := [ aBlock value ] ensure: [ done signal ] ].
-	done wait.
-	^ result
-]
-
 { #category : 'initialization' }
 FRApplication >> initialize [
 
 	super initialize.
-	isSynchronous := false.
 	self addStyleSheetFromString: '.application [
 		.label [
 			.frInitial [ Font { #size: 14 } ],
 			.frNotLoaded [ Draw { #color: EnvironmentColor(#disabledText) } ] ] ]'
-]
-
-{ #category : 'accessing' }
-FRApplication >> lastFailure [
-	"The message of the last failure reported while running synchronously."
-
-	^ self propertyAt: #lastFailure ifAbsent: [ nil ]
 ]
 
 { #category : 'accessing' }
@@ -199,12 +156,13 @@ FRApplication >> loader: aFavoriteLoader [
 
 { #category : 'accessing' }
 FRApplication >> newLoader [
-	"The loader for one Load, asking its questions through my dialogs."
+	"The loader for one Load, asking its questions and telling what it did through my dialogs."
 
 	^ (loader ifNil: [ FRFavoriteLoader new ])
 		  catalog: self catalog;
 		  baselineChooser: [ :names | self chooseBaselineAmong: names ];
 		  switchConfirmer: [ :repository | self confirmSwitchOf: repository ];
+		  informer: [ :text | self report: text titled: 'Clone attached to the code of the image' ];
 		  yourself
 ]
 
@@ -216,10 +174,19 @@ FRApplication >> openIceberg [
 ]
 
 { #category : 'dialogs' }
-FRApplication >> reportFailure: aString titled: aTitle [
-	"Show a failure to the user, or record it when running synchronously."
+FRApplication >> report: aString titled: aTitle [
+	"Show what a step did."
 
-	isSynchronous ifTrue: [ ^ self propertyAt: #lastFailure put: aString ].
+	self newInform
+		title: aTitle;
+		label: aString;
+		openModal
+]
+
+{ #category : 'dialogs' }
+FRApplication >> reportFailure: aString titled: aTitle [
+	"Show a failure to the user."
+
 	self newInform
 		title: aTitle;
 		label: aString;
@@ -246,15 +213,11 @@ FRApplication >> request: aString initialAnswer: anAnswer titled: aTitle [
 
 { #category : 'running' }
 FRApplication >> run: aBlock titled: aString [
-	"Run aBlock with a progress bar; in the background unless I am synchronous."
+	"Run aBlock with a progress bar."
 
-	| job |
-	job := [ :aJob |
-		       aJob title: aString.
-		       aBlock value ] asJob.
-	isSynchronous
-		ifTrue: [ job run ]
-		ifFalse: [ [ job run ] forkAt: Processor userBackgroundPriority named: aString ]
+	[ :job |
+		job title: aString.
+		aBlock value ] asJob run
 ]
 
 { #category : 'running' }
@@ -280,8 +243,7 @@ FRApplication >> store: aFavoriteStore [
 
 { #category : 'dialogs' }
 FRApplication >> tell: aString [
-	"Show a short notification, or record it when running synchronously."
+	"Show a short notification."
 
-	isSynchronous ifTrue: [ ^ self propertyAt: #lastMessage put: aString ].
 	self inform: aString
 ]

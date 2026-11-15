@@ -4,7 +4,7 @@ I load a favorite into the image in one go: clone, find the baseline, load it wi
 ## Responsibility:
 
 - I clone the favorite with Iceberg at its branch or tag, register a clone left on disk (after Iceberg's Forget), or reuse its registered clone and switch it to that branch (asking first when the clone has uncommitted changes).
-- When the clone holds code the image already has from a repository without clone (one that came with the image, such as Spec2 for a fork of Spec), I attach the clone to that repository instead of registering it apart, and check out a branch `image-<commit>` at the commit the image was loaded from, without loading anything: the image and the clone are in sync, and commits go to the clone's remote (your fork).
+- When the clone holds code the image already has from a repository without clone (one that came with the image, such as Spec2 for a fork of Spec), I attach the clone to that repository instead of registering it apart, and check out a branch `image-<commit>` at the commit the image was loaded from, without loading anything: the image and the clone are in sync, and commits go to the clone's remote (your fork). I add the project it was forked from as the `upstream` remote (found by `FRUpstreamFinder`) and fetch it first, so the image commit is found even when the fork is behind, then tell the user what I did through the informer block.
 - I find the source folder from the `.project` file and the `BaselineOf` packages in it; I ask which one to load when there are several.
 - I load the `default` group with `Metacello`, keeping the projects already loaded (`onConflictUseLoaded`).
 
@@ -20,7 +20,7 @@ I load a favorite into the image in one go: clone, find the baseline, load it wi
 - `clone: aFavorite` only clones (or registers a clone left on disk) and answers the Iceberg repository.
 - `repositoryLoadedFrom: aClone among: someRepositories` answers the repository whose loaded packages the clone holds best; `attach:to:` and `syncCloneWithImageOf:` do the attaching.
 - `load: aFavorite` answers the Iceberg repository; raises `FRError` when there is no baseline or the user cancels.
-- `catalog:`, `baselineChooser:`, `switchConfirmer:`, `clonesLocation:` (Iceberg's clone folder by default) configure me.
+- `catalog:`, `baselineChooser:`, `switchConfirmer:`, `informer:` (what `report:` tells), `upstreamFinder:`, `clonesLocation:` (Iceberg's clone folder by default) configure me.
 - `baselineNamesIn:`, `sourceDirectoryOf:`, `metacelloRepositoryFor:`, `commitishFor:`, `cloneDirectoryFor:`, `existingCloneFor:` are the steps, testable without network.
 
 ```
@@ -36,7 +36,9 @@ Class {
 		'catalog',
 		'baselineChooser',
 		'switchConfirmer',
-		'clonesLocation'
+		'clonesLocation',
+		'upstreamFinder',
+		'informer'
 	],
 	#category : 'Favrepo',
 	#package : 'Favrepo'
@@ -54,14 +56,62 @@ FRFavoriteLoader class >> exampleOnSmallImage [
 ]
 
 { #category : 'attaching' }
-FRFavoriteLoader >> attach: aClone to: aLoadedRepository [
-	"Make aLoadedRepository, whose code is in the image, work on the clone of aClone, then put the clone on the commit the image was loaded from. Committing then goes to aClone's remote (a fork, for pull requests)."
+FRFavoriteLoader >> addUpstreamTo: aRepository [
+	"Add the project aRepository was forked from as its upstream remote and fetch it, so that the commit of the image is found even when the fork is behind. Answer the upstream URL, or nil when there is none or it cannot be fetched."
 
+	| url remote |
+	url := self upstreamFinder upstreamUrlFor: aRepository origin url.
+	url ifNil: [ ^ nil ].
+	remote := aRepository remoteNamed: 'upstream' ifAbsent: [
+			          aRepository addRemote: (IceGitRemote name: 'upstream' url: url).
+			          aRepository remoteNamed: 'upstream' ].
+	^ [
+		  aRepository fetchFrom: remote.
+		  remote url ]
+		  on: Error
+		  do: [ nil ]
+]
+
+{ #category : 'attaching' }
+FRFavoriteLoader >> attach: aClone to: aLoadedRepository [
+	"Make aLoadedRepository, whose code is in the image, work on the clone of aClone, add the project it was forked from as upstream, then put the clone on the commit the image was loaded from. Committing goes to aClone's remote (a fork, for pull requests)."
+
+	| upstream branch |
 	aLoadedRepository location: aClone location.
 	aClone free.
-	self syncCloneWithImageOf: aLoadedRepository.
+	upstream := self addUpstreamTo: aLoadedRepository.
+	branch := self syncCloneWithImageOf: aLoadedRepository.
 	Iceberg announcer announce: (IceRepositoryModified for: aLoadedRepository).
+	self report: (self attachReportFor: aLoadedRepository branch: branch upstream: upstream).
 	^ aLoadedRepository
+]
+
+{ #category : 'attaching' }
+FRFavoriteLoader >> attachReportFor: aRepository branch: aBranchNameOrNil upstream: anUpstreamUrlOrNil [
+	"The text telling the user how the clone was attached to the code of the image."
+
+	^ String streamContents: [ :stream |
+			  stream nextPutAll:
+				  ('The clone now holds {1}, the code loaded in the image; commits go to your repository (origin).' format:
+					   { aRepository name }).
+			  stream
+				  cr;
+				  cr.
+			  aBranchNameOrNil
+				  ifNil: [
+						  stream nextPutAll:
+							  'The commit the image was built from was not found: the clone stays on its branch and the differences with the image show as changes in Iceberg.' ]
+				  ifNotNil: [
+						  stream nextPutAll:
+							  ('Branch {1} is checked out at the commit the image was built from: the image and the clone are in sync.' format:
+								   { aBranchNameOrNil }) ].
+			  stream
+				  cr;
+				  cr.
+			  anUpstreamUrlOrNil
+				  ifNil: [
+				  stream nextPutAll: 'No upstream remote was added: the project it was forked from is unknown or could not be fetched.' ]
+				  ifNotNil: [ stream nextPutAll: ('Remote upstream: {1}' format: { anUpstreamUrlOrNil }) ] ]
 ]
 
 { #category : 'accessing' }
@@ -167,12 +217,20 @@ FRFavoriteLoader >> imageBranchNameFor: aCommit [
 	^ 'image-' , aCommit shortId
 ]
 
+{ #category : 'accessing' }
+FRFavoriteLoader >> informer: aBlock [
+	"aBlock receives a text telling what happened when a clone was attached to the code of the image."
+
+	informer := aBlock
+]
+
 { #category : 'initialization' }
 FRFavoriteLoader >> initialize [
 
 	super initialize.
 	baselineChooser := [ :names | nil ].
-	switchConfirmer := [ :repository | false ]
+	switchConfirmer := [ :repository | false ].
+	informer := [ :text |  ]
 ]
 
 { #category : 'loading' }
@@ -219,6 +277,13 @@ FRFavoriteLoader >> registerOrAttach: aClone [
 	(self repositoryLoadedFrom: aClone among: self repositoriesToAttach) ifNotNil: [ :loaded | ^ self attach: aClone to: loaded ].
 	aClone register.
 	^ aClone
+]
+
+{ #category : 'accessing' }
+FRFavoriteLoader >> report: aString [
+	"Tell the user what happened, through the informer."
+
+	informer value: aString
 ]
 
 { #category : 'attaching' }
@@ -306,16 +371,29 @@ FRFavoriteLoader >> switchConfirmer: aBlock [
 
 { #category : 'attaching' }
 FRFavoriteLoader >> syncCloneWithImageOf: aRepository [
-	"Without loading anything, check out a branch at the commit the image code comes from, so that the image and the clone have no difference. When the clone does not know that commit (a fork not up to date), keep its branch: the image differences show as changes."
+	"Without loading anything, check out a branch at the commit the image code comes from, so that the image and the clone have no difference, and answer its name. When the clone does not know that commit, keep its branch and answer nil: the image differences show as changes."
 
 	| commit branchName |
 	commit := aRepository lookupCommit: aRepository workingCopy referenceCommit id.
 	commit isUnknownCommit ifTrue: [
 			aRepository branch switch.
-			^ self ].
+			^ nil ].
 	branchName := self imageBranchNameFor: commit.
 	(aRepository hasLocalBranchNamed: branchName)
 		ifTrue: [ (aRepository branchNamed: branchName) switch ]
 		ifFalse: [ aRepository createBranch: branchName inCommit: commit ].
-	commit adopt
+	commit adopt.
+	^ branchName
+]
+
+{ #category : 'accessing' }
+FRFavoriteLoader >> upstreamFinder [
+
+	^ upstreamFinder ifNil: [ upstreamFinder := FRUpstreamFinder new ]
+]
+
+{ #category : 'accessing' }
+FRFavoriteLoader >> upstreamFinder: anUpstreamFinder [
+
+	upstreamFinder := anUpstreamFinder
 ]

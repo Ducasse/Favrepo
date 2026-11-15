@@ -74,10 +74,8 @@ FRFavoritesPresenter >> cloneFavorite: aFavorite [
 		run: [
 				[ self application newLoader clone: aFavorite ]
 					on: Error
-					do: [ :error |
-							self application inUIProcess: [
-								self application reportFailure: error messageText titled: ('Cloning {1} failed' format: { aFavorite name }) ] ].
-				self application inUIProcess: [ self refresh ] ]
+					do: [ :error | self application reportFailure: error messageText titled: ('Cloning {1} failed' format: { aFavorite name }) ].
+				self refresh ]
 		titled: ('Cloning {1}' format: { aFavorite name })
 ]
 
@@ -181,10 +179,8 @@ FRFavoritesPresenter >> loadFavorite: aFavorite [
 		run: [
 				[ self application newLoader load: aFavorite ]
 					on: Error
-					do: [ :error |
-							self application inUIProcess: [
-								self application reportFailure: error messageText titled: ('Loading {1} failed' format: { aFavorite name }) ] ].
-				self application inUIProcess: [ self refresh ] ]
+					do: [ :error | self application reportFailure: error messageText titled: ('Loading {1} failed' format: { aFavorite name }) ].
+				self refresh ]
 		titled: ('Loading {1}' format: { aFavorite name })
 ]
 

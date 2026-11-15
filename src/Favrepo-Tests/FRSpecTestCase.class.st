@@ -1,5 +1,5 @@
 "
-I am the common fixture of the presenter tests: an `FRApplication` running synchronously on an in-memory `FRFavoriteStore`, a hand-made `FRCatalog`, and an `FRRecordingLoader` that never touches the network.
+I am the common fixture of the presenter tests: an `FRTestApplication` recording its dialogs on an in-memory `FRFavoriteStore`, a hand-made `FRCatalog`, and an `FRRecordingLoader` that never touches the network.
 "
 Class {
 	#name : 'FRSpecTestCase',
@@ -57,11 +57,10 @@ FRSpecTestCase >> setUp [
 	store add: (FRFavorite url: 'git@github.com:SeasideSt/Seaside.git' name: 'Seaside' branch: 'master').
 	store add: (FRFavorite url: 'git@github.com:Ducasse/Favrepo.git').
 	loader := FRRecordingLoader new.
-	application := FRApplication new
+	application := FRTestApplication new
 		               store: store;
 		               catalog: self catalog;
 		               loader: loader;
-		               beSynchronous;
 		               yourself
 ]
 

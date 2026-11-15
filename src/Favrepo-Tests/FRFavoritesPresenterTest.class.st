@@ -206,6 +206,14 @@ FRFavoritesPresenterTest >> testLoadedRowShowsCheckedOutBranchAndCannotChangeIt 
 ]
 
 { #category : 'tests' }
+FRFavoritesPresenterTest >> testLoaderReportsAttachingThroughTheApplication [
+	"What the loader tells after attaching a clone to the code of the image reaches the user."
+
+	application newLoader report: 'Spec2 attached'.
+	self assert: application lastReport equals: 'Spec2 attached'
+]
+
+{ #category : 'tests' }
 FRFavoritesPresenterTest >> testNotClonedRowIsGreyAndCanOnlyBeCloned [
 
 	| row |
