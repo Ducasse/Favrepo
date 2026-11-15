@@ -1,5 +1,5 @@
 "
-I am the favorites application for tests: I record failures, reports and notifications (`lastFailure`, `lastReport`, `lastMessage`) instead of opening dialogs.
+I am the favorites application for tests: I record failures, reports, notifications and the help (`lastFailure`, `lastReport`, `lastMessage`, `lastHelp`) instead of opening dialogs.
 
 See `FRSpecTestCase >> #setUp`.
 "
@@ -9,7 +9,8 @@ Class {
 	#instVars : [
 		'lastFailure',
 		'lastReport',
-		'lastMessage'
+		'lastMessage',
+		'lastHelp'
 	],
 	#category : 'Favrepo-Tests',
 	#package : 'Favrepo-Tests'
@@ -19,6 +20,12 @@ Class {
 FRTestApplication >> lastFailure [
 
 	^ lastFailure
+]
+
+{ #category : 'accessing' }
+FRTestApplication >> lastHelp [
+
+	^ lastHelp
 ]
 
 { #category : 'accessing' }
@@ -45,6 +52,13 @@ FRTestApplication >> reportFailure: aString titled: aTitle [
 	"Record the failure instead of showing it."
 
 	lastFailure := aString
+]
+
+{ #category : 'dialogs' }
+FRTestApplication >> showHelp: aMicrodownString [
+	"Record the help instead of opening it."
+
+	lastHelp := aMicrodownString
 ]
 
 { #category : 'dialogs' }

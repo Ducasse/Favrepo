@@ -201,6 +201,29 @@ FRFavoritesPresenterTest >> testEveryRowShowsTheSameControls [
 ]
 
 { #category : 'tests' }
+FRFavoritesPresenterTest >> testHelpButtonShowsTheHelp [
+
+	(presenter presenters detect: [ :each |
+		 (each isKindOf: SpButtonPresenter) and: [ each help = 'What Favorite repositories can do' ] ]) click.
+	self assert: application lastHelp equals: FRFavoritesPresenter helpText
+]
+
+{ #category : 'tests' }
+FRFavoritesPresenterTest >> testHelpDescribesEveryRowMenuItem [
+
+	| help |
+	help := FRFavoritesPresenter helpText.
+	presenter favoritesList actions allCommands do: [ :each |
+		self assert: (help includesSubstring: each name) description: [ '{1} is not in the help' format: { each name } ] ]
+]
+
+{ #category : 'tests' }
+FRFavoritesPresenterTest >> testHelpIsMicrodown [
+
+	self assert: (Microdown parse: FRFavoritesPresenter helpText) children first level equals: 1
+]
+
+{ #category : 'tests' }
 FRFavoritesPresenterTest >> testIcebergButtonOpensIceberg [
 
 	| opened |

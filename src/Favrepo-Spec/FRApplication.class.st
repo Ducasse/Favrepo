@@ -18,7 +18,7 @@ I am the Spec application of the favorites tool: I open its window and give its 
 - `FRApplication new run` (Spec's entry point; it calls `start`, which I override)
 - `store:`, `catalog:`, `loader:` replace the defaults (tests, examples); `FRTestApplication` records my dialogs in tests.
 - `openIceberg` opens Iceberg on all the repositories and `browseRepository:` on one (`icebergOpener:` and `repositoryBrowser:` replace them in tests).
-- `run:titled:`, `newPharoIntegrationFor:`, `openPullRequestFor:`, `reportFailure:titled:`, `report:titled:`, `tell:`, `request:initialAnswer:titled:`.
+- `run:titled:`, `newPharoIntegrationFor:`, `openPullRequestFor:`, `showHelp:`, `reportFailure:titled:`, `report:titled:`, `tell:`, `request:initialAnswer:titled:`.
 
 ```
 FRApplication new run
@@ -275,6 +275,19 @@ FRApplication >> run: aBlock titled: aString [
 	[ :job |
 		job title: aString.
 		aBlock value ] asJob run
+]
+
+{ #category : 'dialogs' }
+FRApplication >> showHelp: aMicrodownString [
+	"Open a window showing aMicrodownString rendered."
+
+	(self instantiate: MicrodownPresenter)
+		documentFromString: aMicrodownString;
+		open;
+		withWindowDo: [ :window |
+				window
+					title: 'Favorite repositories help';
+					resize: 620 @ 640 ]
 ]
 
 { #category : 'running' }
