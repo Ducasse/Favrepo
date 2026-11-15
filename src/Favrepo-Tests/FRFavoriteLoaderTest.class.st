@@ -105,6 +105,12 @@ FRFavoriteLoaderTest >> testBaselineNamesFindsTonelPackages [
 	self assert: (self loader baselineNamesIn: clone) equals: #( 'MyProject' )
 ]
 
+{ #category : 'tests - bottom branch' }
+FRFavoriteLoaderTest >> testBottomBranchNameIsTheIsoDateThenBottom [
+
+	self assert: (self loader bottomBranchNameOn: (Date year: 2026 month: 11 day: 5)) equals: '2026-11-05-Bottom'
+]
+
 { #category : 'tests - errors' }
 FRFavoriteLoaderTest >> testChooserCancelRaisesError [
 
@@ -167,6 +173,17 @@ FRFavoriteLoaderTest >> testCloneDirectoryIsOwnerAndProjectInTheClonesLocation [
 FRFavoriteLoaderTest >> testDefaultBranchMeansNoCommitish [
 
 	self assert: (self loader commitishFor: (FRFavorite url: 'git@github.com:noha/mustache.git')) isNil
+]
+
+{ #category : 'tests - errors' }
+FRFavoriteLoaderTest >> testDefineBottomBranchWithoutCloneRaisesError [
+
+	self
+		should: [
+				self loader
+					catalog: (FRCatalog withAll: #(  ));
+					defineBottomBranchFor: self mustache ]
+		raise: FRError
 ]
 
 { #category : 'tests' }

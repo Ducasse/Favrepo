@@ -9,11 +9,18 @@ Class {
 	#instVars : [
 		'loaded',
 		'failure',
-		'cloned'
+		'cloned',
+		'bottomBranched'
 	],
 	#category : 'Favrepo-Tests',
 	#package : 'Favrepo-Tests'
 }
+
+{ #category : 'accessing' }
+FRRecordingLoader >> bottomBranched [
+
+	^ bottomBranched ifNil: [ bottomBranched := OrderedCollection new ]
+]
 
 { #category : 'steps' }
 FRRecordingLoader >> clone: aFavorite [
@@ -28,6 +35,15 @@ FRRecordingLoader >> clone: aFavorite [
 FRRecordingLoader >> cloned [
 
 	^ cloned ifNil: [ cloned := OrderedCollection new ]
+]
+
+{ #category : 'bottom branch' }
+FRRecordingLoader >> defineBottomBranchFor: aFavorite [
+	"Record aFavorite instead of creating a branch in its clone."
+
+	failure ifNotNil: [ FRError signal: failure ].
+	self bottomBranched add: aFavorite.
+	^ self bottomBranchNameOn: Date today
 ]
 
 { #category : 'accessing' }

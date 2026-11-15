@@ -19,6 +19,7 @@ I load a favorite into the image in one go: clone, find the baseline, load it wi
 
 - `clone: aFavorite` only clones (or registers a clone left on disk) and answers the Iceberg repository.
 - `repositoryLoadedFrom: aClone among: someRepositories` answers the repository whose loaded packages the clone holds best; `attach:to:` and `syncCloneWithImageOf:` do the attaching.
+- `defineBottomBranchFor: aFavorite` creates and checks out today's bottom branch (`2026-11-15-Bottom`) at the current commit of the clone, without loading; `bottomBranchNameOn: aDate` names it.
 - `load: aFavorite` answers the Iceberg repository; raises `FRError` when there is no baseline or the user cancels.
 - `catalog:`, `baselineChooser:`, `switchConfirmer:`, `informer:` (what `report:` tells), `upstreamFinder:`, `clonesLocation:` (Iceberg's clone folder by default) configure me.
 - `baselineNamesIn:`, `sourceDirectoryOf:`, `metacelloRepositoryFor:`, `commitishFor:`, `cloneDirectoryFor:`, `existingCloneFor:` are the steps, testable without network.
@@ -145,6 +146,13 @@ FRFavoriteLoader >> baselineToLoadIn: aCloneDirectory [
 	^ chosen
 ]
 
+{ #category : 'bottom branch' }
+FRFavoriteLoader >> bottomBranchNameOn: aDate [
+	"The bottom branch of aDate: its ISO date followed by -Bottom."
+
+	^ aDate yyyymmdd , '-Bottom'
+]
+
 { #category : 'accessing' }
 FRFavoriteLoader >> catalog [
 
@@ -198,6 +206,24 @@ FRFavoriteLoader >> commitishFor: aFavorite [
 	^ aFavorite isDefaultBranch
 		  ifTrue: [ nil ]
 		  ifFalse: [ aFavorite branch ]
+]
+
+{ #category : 'bottom branch' }
+FRFavoriteLoader >> defineBottomBranchFor: aFavorite [
+	"Create today's bottom branch at the current commit of aFavorite's clone and check it out; nothing is loaded, the image code stays. Answer the branch name."
+
+	| info repository name |
+	info := self catalog infoFor: aFavorite.
+	(info isNil or: [ info isCloned not ]) ifTrue: [ FRError signal: ('{1} has no clone: clone it first' format: { aFavorite name }) ].
+	repository := info iceRepository.
+	name := self bottomBranchNameOn: Date today.
+	(repository hasLocalBranchNamed: name) ifTrue: [
+			FRError signal: ('{1} already has a branch {2}' format: {
+						 aFavorite name.
+						 name }) ].
+	repository createBranch: name.
+	Iceberg announcer announce: (IceRepositoryModified for: repository).
+	^ name
 ]
 
 { #category : 'steps' }

@@ -9,6 +9,13 @@ Class {
 }
 
 { #category : 'helpers' }
+FRFavoritesPresenterTest >> clickBottomBranchOf: aName [
+
+	((presenter rowNamed: aName) presenters detect: [ :each |
+		 (each isKindOf: SpButtonPresenter) and: [ each label = 'define bottom branches' ] ]) click
+]
+
+{ #category : 'helpers' }
 FRFavoritesPresenterTest >> clickCloneOf: aName [
 
 	((presenter rowNamed: aName) presenters detect: [ :each |
@@ -44,6 +51,14 @@ FRFavoritesPresenterTest >> setUp [
 
 	super setUp.
 	presenter := application instantiate: FRFavoritesPresenter
+]
+
+{ #category : 'tests' }
+FRFavoritesPresenterTest >> testBottomBranchNeedsAClone [
+
+	self assert: (presenter rowNamed: 'Favrepo') isBottomBranchEnabled.
+	self deny: (presenter rowNamed: 'Roassal') isBottomBranchEnabled.
+	self deny: (presenter rowNamed: 'Seaside') isBottomBranchEnabled
 ]
 
 { #category : 'tests' }
@@ -124,6 +139,14 @@ FRFavoritesPresenterTest >> testClonedRowIsGreyAndCanBeLoaded [
 ]
 
 { #category : 'tests' }
+FRFavoritesPresenterTest >> testDefineBottomBranchOfAClone [
+
+	self clickBottomBranchOf: 'Favrepo'.
+	self assert: (loader bottomBranched collect: [ :each | each name ] as: Array) equals: #( 'Favrepo' ).
+	self assert: (application lastMessage includesSubstring: 'Favrepo')
+]
+
+{ #category : 'tests' }
 FRFavoritesPresenterTest >> testDoubleClickOnANotClonedFavoriteOpensNothing [
 
 	self assert: (self doubleClick: 'Seaside') isEmpty
@@ -139,12 +162,9 @@ FRFavoritesPresenterTest >> testDoubleClickOpensTheIcebergRepository [
 FRFavoritesPresenterTest >> testEveryRowShowsTheSameControls [
 
 	| shapes |
-	shapes := presenter rows collect: [ :row |
-		          row layout children collect: [ :each | each class ] as: Array ].
+	shapes := presenter rows collect: [ :row | row layout children collect: [ :each | each class ] as: Array ].
 	self assert: shapes asSet size equals: 1.
-	self
-		assert: ((presenter rowNamed: 'Roassal') layout children count: [ :each | each isKindOf: SpButtonPresenter ])
-		equals: 2
+	self assert: ((presenter rowNamed: 'Roassal') layout children count: [ :each | each isKindOf: SpButtonPresenter ]) equals: 3
 ]
 
 { #category : 'tests' }

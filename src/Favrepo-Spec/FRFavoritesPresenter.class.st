@@ -105,6 +105,22 @@ FRFavoritesPresenter >> defaultLayout [
 ]
 
 { #category : 'actions' }
+FRFavoritesPresenter >> defineBottomBranchOf: aFavorite [
+	"Create today's bottom branch in the clone of aFavorite, then show its new state."
+
+	[
+		| name |
+		name := self application newLoader defineBottomBranchFor: aFavorite.
+		self application tell: ('{1}: branch {2} created and checked out' format: {
+					 aFavorite name.
+					 name }) ]
+		on: Error
+		do: [ :error |
+		self application reportFailure: error messageText titled: ('Bottom branch of {1} failed' format: { aFavorite name }) ].
+	self refresh
+]
+
+{ #category : 'actions' }
 FRFavoritesPresenter >> favoriteAccepted: aFavorite [
 
 	self refresh.
