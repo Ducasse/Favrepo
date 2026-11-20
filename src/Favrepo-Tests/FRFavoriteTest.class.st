@@ -37,12 +37,6 @@ FRFavoriteTest >> testHttpsUrlGivesTheSameName [
 	self assert: (FRFavorite url: 'https://github.com/pillar-markup/Microdown') name equals: 'Microdown'
 ]
 
-{ #category : 'tests' }
-FRFavoriteTest >> testInitialIsTheUppercaseFirstLetterOfTheName [
-
-	self assert: (FRFavorite url: 'git@github.com:noha/mustache.git') initial equals: 'M'
-]
-
 { #category : 'tests - errors' }
 FRFavoriteTest >> testInvalidUrlRaisesError [
 

@@ -144,15 +144,6 @@ FRFavorite >> hasName: aString [
 	^ name sameAs: aString
 ]
 
-{ #category : 'accessing' }
-FRFavorite >> initial [
-	"The letter shown as the favorite's avatar."
-
-	^ name isEmpty
-		  ifTrue: [ '?' ]
-		  ifFalse: [ name first asUppercase asString ]
-]
-
 { #category : 'testing' }
 FRFavorite >> isDefaultBranch [
 

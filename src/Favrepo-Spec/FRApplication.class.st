@@ -46,7 +46,8 @@ Class {
 		'catalogProvider',
 		'loader',
 		'repositoryBrowser',
-		'icebergOpener'
+		'icebergOpener',
+		'selfUpdater'
 	],
 	#category : 'Favrepo-Spec',
 	#package : 'Favrepo-Spec'
@@ -180,7 +181,6 @@ FRApplication >> initialize [
 	super initialize.
 	self addStyleSheetFromString: '.application [
 		.label [
-			.frInitial [ Font { #size: 14 } ],
 			.frNotLoaded [ Draw { #color: EnvironmentColor(#disabledText) } ] ] ]'
 ]
 
@@ -275,6 +275,19 @@ FRApplication >> run: aBlock titled: aString [
 	[ :job |
 		job title: aString.
 		aBlock value ] asJob run
+]
+
+{ #category : 'accessing' }
+FRApplication >> selfUpdater [
+	"What updates Favrepo itself in this image."
+
+	^ selfUpdater ifNil: [ selfUpdater := FRSelfUpdater new ]
+]
+
+{ #category : 'accessing' }
+FRApplication >> selfUpdater: aSelfUpdater [
+
+	selfUpdater := aSelfUpdater
 ]
 
 { #category : 'dialogs' }

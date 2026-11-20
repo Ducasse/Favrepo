@@ -34,7 +34,6 @@ Class {
 		'info',
 		'isLoading',
 		'isUpdating',
-		'initialLabel',
 		'nameLabel',
 		'pathLabel',
 		'branchDropDown',
@@ -159,7 +158,6 @@ FRFavoriteRowPresenter >> defaultLayout [
 	^ SpBoxLayout newLeftToRight
 		  spacing: 8;
 		  vAlignCenter;
-		  add: initialLabel width: 24;
 		  add: (SpBoxLayout newTopToBottom
 				   add: nameLabel expand: false;
 				   add: pathLabel expand: false;
@@ -193,12 +191,6 @@ FRFavoriteRowPresenter >> favoritesPresenter: aFavoritesPresenter [
 	favoritesPresenter := aFavoritesPresenter
 ]
 
-{ #category : 'accessing - display' }
-FRFavoriteRowPresenter >> initialText [
-
-	^ initialLabel label
-]
-
 { #category : 'initialization' }
 FRFavoriteRowPresenter >> initialize [
 
@@ -212,10 +204,6 @@ FRFavoriteRowPresenter >> initialize [
 FRFavoriteRowPresenter >> initializePresenters [
 	"Bold through the text, not a Font style: SpFontStyle makes shared fonts bold."
 
-	initialLabel := self newLabel
-		                addStyle: 'frInitial';
-		                displayBold: [ :text | true ];
-		                yourself.
 	nameLabel := self newLabel
 		             displayBold: [ :text | true ];
 		             yourself.
@@ -367,11 +355,9 @@ FRFavoriteRowPresenter >> updateButtons [
 { #category : 'updating' }
 FRFavoriteRowPresenter >> updateLabels [
 
-	initialLabel label: favorite initial.
 	nameLabel label: favorite name.
 	pathLabel label: favorite projectPath.
 	{
-		initialLabel.
 		nameLabel.
 		pathLabel } do: [ :each |
 			self isGrey

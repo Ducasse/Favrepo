@@ -388,11 +388,10 @@ FRFavoritesPresenterTest >> testRowNameIsBold [
 ]
 
 { #category : 'tests' }
-FRFavoritesPresenterTest >> testRowShowsInitialNameAndProjectPath [
+FRFavoritesPresenterTest >> testRowShowsNameAndProjectPath [
 
 	| row |
 	row := presenter rowNamed: 'Seaside'.
-	self assert: row initialText equals: 'S'.
 	self assert: row nameText equals: 'Seaside'.
 	self assert: row pathText equals: 'SeasideSt/Seaside'
 ]
@@ -428,4 +427,35 @@ FRFavoritesPresenterTest >> testSelectFavoriteNamed [
 
 	presenter selectFavoriteNamed: 'seaside'.
 	self assert: presenter selectedFavorite name equals: 'Seaside'
+]
+
+{ #category : 'tests - update' }
+FRFavoritesPresenterTest >> testUpdateButtonReopensTheWindowAfterAnUpdate [
+	| updater |
+	updater := FRRecordingSelfUpdater new answer: 'Favrepo was updated' updated: true; yourself.
+	application selfUpdater: updater.
+	presenter open.
+	presenter updateButton click.
+	self assert: application windows size equals: 1.
+	self deny: application windows anyOne presenter == presenter
+]
+
+{ #category : 'tests - update' }
+FRFavoritesPresenterTest >> testUpdateButtonReportsAFailure [
+	| updater |
+	updater := FRRecordingSelfUpdater new failWith: (FRError new messageText: 'no network'); yourself.
+	application selfUpdater: updater.
+	presenter updateButton click.
+	self assert: (application lastFailure includesSubstring: 'no network').
+	self assert: application lastReport isNil
+]
+
+{ #category : 'tests - update' }
+FRFavoritesPresenterTest >> testUpdateButtonReportsWhatTheUpdaterDid [
+	| updater |
+	updater := FRRecordingSelfUpdater new answer: 'Favrepo is up to date' updated: false; yourself.
+	application selfUpdater: updater.
+	presenter updateButton click.
+	self assert: updater updates equals: 1.
+	self assert: application lastReport equals: 'Favrepo is up to date'
 ]

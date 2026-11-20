@@ -29,7 +29,8 @@ Class {
 		'list',
 		'refreshButton',
 		'icebergButton',
-		'helpButton'
+		'helpButton',
+		'updateButton'
 	],
 	#category : 'Favrepo-Spec',
 	#package : 'Favrepo-Spec'
@@ -53,13 +54,14 @@ Keep the Git repositories you work on at hand, and clone and load them with Iceb
 ## The toolbar
 
 - **Iceberg** opens Iceberg on all the repositories of the image.
+- **Update** (the rightmost button) updates Favrepo itself in this image: it fetches the clone Favrepo was loaded from, pulls the new commits of its branch and loads them, then opens the window again. Nothing is pulled into a clone with uncommitted changes.
 - **Refresh** takes the branches from Iceberg and checks again what is loaded.
 - **+** adds a favorite: type its URL, or pick a repository Iceberg already knows.
 - **?** shows this help.
 
 ## A row
 
-- The initial, the name and the `owner/project` of the favorite. A check mark tells that its code is loaded; a grey row that nothing is loaded.
+- The name and the `owner/project` of the favorite. A check mark tells that its code is loaded; a grey row that nothing is loaded.
 - **Clone** (the down arrow) clones the repository with Iceberg without loading it. A clone left on disk by Iceberg''s Forget is registered again.
 - **Clone of code the image already has**: projects that came with the image, such as NewTools or Spec2, are loaded but have no clone. Clone is offered for them: your clone (for example your fork) is attached to the loaded code instead of being registered apart. The clone is put, without loading anything, on a branch `image-<commit>` at the commit the image was built from, so the image and the clone are in sync. The project it was forked from is added as the `upstream` remote and fetched. Commits go to your fork (`origin`).
 - **The branch list** chooses the branch or tag to load.
@@ -178,6 +180,7 @@ FRFavoritesPresenter >> defaultLayout [
 				   addLast: refreshButton expand: false;
 				   addLast: addButton expand: false;
 				   addLast: helpButton expand: false;
+				   addLast: updateButton expand: false;
 				   yourself)
 		  expand: false;
 		  add: list;
@@ -248,6 +251,11 @@ FRFavoritesPresenter >> initializePresenters [
 		                 help: 'Open Iceberg on all the repositories of the image';
 		                 action: [ self application openIceberg ];
 		                 yourself.
+	updateButton := self newButton
+		                icon: (self iconNamed: #smallUpdate);
+		                help: 'Fetch Favrepo and load its new commits into this image';
+		                action: [ self updateFavrepo ];
+		                yourself.
 	refreshButton := self newButton
 		                 icon: (self iconNamed: #refresh);
 		                 help: 'Take the branches from Iceberg and check again what is loaded';
@@ -388,6 +396,16 @@ FRFavoritesPresenter >> removeSelectedFavorite [
 	self selectedFavorite ifNotNil: [ :favorite | self removeFavorite: favorite ]
 ]
 
+{ #category : 'actions' }
+FRFavoritesPresenter >> reopen [
+	"Close this window and open a new one, built by the code now in the image."
+
+	| app |
+	app := self application.
+	self window close.
+	app start
+]
+
 { #category : 'accessing' }
 FRFavoritesPresenter >> rowNamed: aString [
 
@@ -418,4 +436,24 @@ FRFavoritesPresenter >> takeBranchesFromIceberg [
 
 	self application store takeBranchesFrom: self application catalog.
 	self refresh
+]
+
+{ #category : 'actions' }
+FRFavoritesPresenter >> updateButton [
+
+	^ updateButton
+]
+
+{ #category : 'actions' }
+FRFavoritesPresenter >> updateFavrepo [
+	"Update Favrepo itself in this image. When new code was loaded, open the window again so that it is built by the new code."
+
+	| updater text |
+	updater := self application selfUpdater.
+	text := [ updater update ]
+		        on: Error
+		        do: [ :error |
+		        ^ self application reportFailure: 'Favrepo could not be updated: ' , error messageText titled: 'Update Favrepo' ].
+	self application report: text titled: 'Update Favrepo'.
+	updater updated ifTrue: [ self reopen ]
 ]
