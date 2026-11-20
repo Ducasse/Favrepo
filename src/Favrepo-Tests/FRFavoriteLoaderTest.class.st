@@ -5,7 +5,8 @@ Class {
 	#name : 'FRFavoriteLoaderTest',
 	#superclass : 'TestCase',
 	#instVars : [
-		'fileSystem'
+		'fileSystem',
+		'gitRepository'
 	],
 	#category : 'Favrepo-Tests',
 	#package : 'Favrepo-Tests'
@@ -37,6 +38,20 @@ FRFavoriteLoaderTest >> clonesLoader [
 ]
 
 { #category : 'helpers' }
+FRFavoriteLoaderTest >> gitRepositoryWithBranch: aBranchName [
+	"A git repository on disk, not registered in Iceberg, with one commit on master and a branch aBranchName at that commit; it is checked out on master and deleted by tearDown."
+
+	gitRepository := IceRepositoryCreator new
+		                 location: (FileLocator temp / ('favrepo-test-' , UUID new asString36)) asFileReference;
+		                 subdirectory: 'src';
+		                 createNewRepositoryNamed: 'FRFixture'.
+	gitRepository commitWithMessage: 'Initial commit'.
+	gitRepository createBranch: aBranchName.
+	gitRepository switchToCommitishNamed: 'master'.
+	^ gitRepository
+]
+
+{ #category : 'helpers' }
 FRFavoriteLoaderTest >> loader [
 
 	^ FRFavoriteLoader new
@@ -65,6 +80,17 @@ FRFavoriteLoaderTest >> setUp [
 
 	super setUp.
 	fileSystem := FileSystem memory
+]
+
+{ #category : 'running' }
+FRFavoriteLoaderTest >> tearDown [
+
+	gitRepository ifNotNil: [
+			| location |
+			location := gitRepository location.
+			gitRepository free.
+			location ensureDeleteAll ].
+	super tearDown
 ]
 
 { #category : 'tests - attaching' }
@@ -186,6 +212,12 @@ FRFavoriteLoaderTest >> testDefineBottomBranchWithoutCloneRaisesError [
 		raise: FRError
 ]
 
+{ #category : 'tests - switching' }
+FRFavoriteLoaderTest >> testFallbackCommitishesAreTriedInOrder [
+
+	self assert: self loader fallbackCommitishes asArray equals: #( 'master' 'main' 'dev' )
+]
+
 { #category : 'tests' }
 FRFavoriteLoaderTest >> testFolderWithoutGitIsNoExistingClone [
 
@@ -201,6 +233,18 @@ FRFavoriteLoaderTest >> testGitFolderLeftOnDiskIsAnExistingClone [
 	(folder / '.git') ensureCreateDirectory.
 	(folder / '.git' / 'config') writeStreamDo: [ :stream | stream nextPutAll: '[core]' ].
 	self assert: (self clonesLoader existingCloneFor: self mustache) equals: folder
+]
+
+{ #category : 'tests - switching' }
+FRFavoriteLoaderTest >> testHasCommitishNamedDoesNotFindAMissingBranch [
+
+	self deny: (self loader hasCommitishNamed: 'missing' in: (self gitRepositoryWithBranch: 'dev'))
+]
+
+{ #category : 'tests - switching' }
+FRFavoriteLoaderTest >> testHasCommitishNamedFindsAnExistingBranch [
+
+	self assert: (self loader hasCommitishNamed: 'dev' in: (self gitRepositoryWithBranch: 'dev'))
 ]
 
 { #category : 'tests' }
@@ -272,4 +316,38 @@ FRFavoriteLoaderTest >> testSourceDirectoryIsTheCloneWithoutProjectFile [
 	clone := fileSystem root / 'bare'.
 	clone ensureCreateDirectory.
 	self assert: (self loader sourceDirectoryOf: clone) equals: clone
+]
+
+{ #category : 'tests - switching' }
+FRFavoriteLoaderTest >> testSwitchToExistingBranchChecksItOut [
+
+	| repository |
+	repository := self gitRepositoryWithBranch: 'dev'.
+	self loader switch: repository to: (self mustache withBranch: 'dev').
+	self assert: repository head name equals: 'dev'
+]
+
+{ #category : 'tests - switching' }
+FRFavoriteLoaderTest >> testSwitchToMissingBranchFallsBackOnMaster [
+	"A favorite whose branch does not exist (any more) puts the clone on master, the first fallback branch, instead of failing."
+
+	| repository |
+	repository := self gitRepositoryWithBranch: 'dev'.
+	repository switchToCommitishNamed: 'dev'.
+	self loader switch: repository to: (self mustache withBranch: 'missing').
+	self assert: repository head name equals: 'master'
+]
+
+{ #category : 'tests - switching' }
+FRFavoriteLoaderTest >> testSwitchToMissingBranchTellsTheUser [
+
+	| repository told |
+	repository := self gitRepositoryWithBranch: 'dev'.
+	told := OrderedCollection new.
+	self loader
+		informer: [ :text | told add: text ];
+		switch: repository to: (self mustache withBranch: 'missing').
+	self assert: told size equals: 1.
+	self assert: (told first includesSubstring: 'missing').
+	self assert: (told first includesSubstring: 'master')
 ]

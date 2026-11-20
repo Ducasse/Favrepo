@@ -3,7 +3,7 @@ I load a favorite into the image in one go: clone, find the baseline, load it wi
 
 ## Responsibility:
 
-- I clone the favorite with Iceberg at its branch or tag, register a clone left on disk (after Iceberg's Forget), or reuse its registered clone and switch it to that branch (asking first when the clone has uncommitted changes).
+- I clone the favorite with Iceberg and switch it to its branch or tag (keeping it on its branch, and telling the user, when that branch or tag does not exist), register a clone left on disk (after Iceberg's Forget), or reuse its registered clone and switch it to that branch (asking first when the clone has uncommitted changes).
 - When the clone holds code the image already has from a repository without clone (one that came with the image, such as Spec2 for a fork of Spec), I attach the clone to that repository instead of registering it apart, and check out a branch `image-<commit>` at the commit the image was loaded from, without loading anything: the image and the clone are in sync, and commits go to the clone's remote (your fork). I add the project it was forked from as the `upstream` remote (found by `FRUpstreamFinder`) and fetch it first, so the image commit is found even when the fork is behind, then tell the user what I did through the informer block.
 - I find the source folder from the `.project` file and the `BaselineOf` packages in it; I ask which one to load when there are several.
 - I load the `default` group with `Metacello`, keeping the projects already loaded (`onConflictUseLoaded`).
@@ -21,8 +21,8 @@ I load a favorite into the image in one go: clone, find the baseline, load it wi
 - `repositoryLoadedFrom: aClone among: someRepositories` answers the repository whose loaded packages the clone holds best; `attach:to:` and `syncCloneWithImageOf:` do the attaching.
 - `defineBottomBranchFor: aFavorite` creates and checks out today's bottom branch (`2026-11-15-Bottom`) at the current commit of the clone, without loading; `bottomBranchNameOn: aDate` names it.
 - `load: aFavorite` answers the Iceberg repository; raises `FRError` when there is no baseline or the user cancels.
-- `catalog:`, `baselineChooser:`, `switchConfirmer:`, `informer:` (what `report:` tells), `upstreamFinder:`, `clonesLocation:` (Iceberg's clone folder by default) configure me.
-- `baselineNamesIn:`, `sourceDirectoryOf:`, `metacelloRepositoryFor:`, `commitishFor:`, `cloneDirectoryFor:`, `existingCloneFor:` are the steps, testable without network.
+- `catalog:`, `baselineChooser:`, `switchConfirmer:`, `informer:` (what `report:` tells: a clone attached to the image code, a missing branch), `upstreamFinder:`, `clonesLocation:` (Iceberg's clone folder by default) configure me.
+- `baselineNamesIn:`, `sourceDirectoryOf:`, `metacelloRepositoryFor:`, `commitishFor:`, `cloneDirectoryFor:`, `existingCloneFor:`, `hasCommitishNamed:in:` are the steps, testable without network.
 
 ```
 FRFavoriteLoader new load: (FRFavorite url: 'git@github.com:noha/mustache.git')
@@ -166,17 +166,16 @@ FRFavoriteLoader >> catalog: aCatalog [
 
 { #category : 'steps' }
 FRFavoriteLoader >> clone: aFavorite [
-	"Register the clone left on disk if there is one, otherwise clone aFavorite at its branch or tag. A clone of code the image already has (a fork of a project that came with the image) takes over that code instead of being registered apart."
+	"Register the clone left on disk if there is one, otherwise clone aFavorite and put it on its branch or tag. A clone of code the image already has (a fork of a project that came with the image) takes over that code instead of being registered apart.
+	The clone is made on the remote's default branch and switched by #switch:to:, which keeps it there when the favorite's branch does not exist; Iceberg's own switch would fail and leave an unregistered clone on disk."
 
-	| creator repository |
+	| repository |
 	(self existingCloneFor: aFavorite) ifNotNil: [ :directory | ^ self register: directory for: aFavorite ].
-	creator := IceRepositoryCreator new
-		           remote: (IceGitRemote url: aFavorite url);
-		           location: (self cloneDirectoryFor: aFavorite);
-		           yourself.
-	(self commitishFor: aFavorite) ifNotNil: [ :commitish | creator commitishName: commitish ].
-	repository := creator createRepository.
-	^ self registerOrAttach: repository
+	repository := IceRepositoryCreator new
+		              remote: (IceGitRemote url: aFavorite url);
+		              location: (self cloneDirectoryFor: aFavorite);
+		              createRepository.
+	^ self registerOrAttach: repository for: aFavorite
 ]
 
 { #category : 'steps' }
@@ -235,6 +234,31 @@ FRFavoriteLoader >> existingCloneFor: aFavorite [
 	^ directory
 ]
 
+{ #category : 'loading' }
+FRFavoriteLoader >> fallbackCommitishIn: anIceRepository [
+	"The first of the fallback branches that anIceRepository knows, or nil."
+
+	^ self fallbackCommitishes detect: [ :each | self hasCommitishNamed: each in: anIceRepository ] ifNone: [ nil ]
+]
+
+{ #category : 'loading' }
+FRFavoriteLoader >> fallbackCommitishes [
+	"The branches tried, in order, when the branch of a favorite does not exist."
+
+	^ #( 'master' 'main' 'dev' )
+]
+
+{ #category : 'loading' }
+FRFavoriteLoader >> hasCommitishNamed: aString in: anIceRepository [
+	"Whether aString names a branch, a remote branch, a tag or a commit that anIceRepository knows."
+
+	^ [
+		  anIceRepository commitishNamed: aString.
+		  true ]
+		  on: NotFound
+		  do: [ false ]
+]
+
 { #category : 'attaching' }
 FRFavoriteLoader >> imageBranchNameFor: aCommit [
 	"The branch created at the commit the image code comes from."
@@ -281,27 +305,45 @@ FRFavoriteLoader >> metacelloRepositoryFor: aCloneDirectory [
 	^ 'gitlocal://' , (self sourceDirectoryOf: aCloneDirectory) fullName
 ]
 
+{ #category : 'loading' }
+FRFavoriteLoader >> missingBranchReportFor: aFavorite in: anIceRepository [
+	"The text telling the user that the branch of aFavorite does not exist, so its clone stays on its current branch."
+
+	^ '{1} has no branch or tag {2}: the clone stays on {3}. Edit the favorite to choose another branch.' format: {
+			  aFavorite name.
+			  aFavorite branch.
+			  anIceRepository head name }
+]
+
+{ #category : 'loading' }
+FRFavoriteLoader >> missingBranchReportFor: aFavorite in: anIceRepository fallback: aCommitishOrNil [
+	"The text telling the user that the branch of aFavorite does not exist, and which branch the clone is on instead."
+
+	^ aCommitishOrNil ifNil: [ self missingBranchReportFor: aFavorite in: anIceRepository ] ifNotNil: [
+			  '{1} has no branch or tag {2}: the clone is on {3} instead. Edit the favorite to choose another branch.' format: {
+					  aFavorite name.
+					  aFavorite branch.
+					  aCommitishOrNil } ]
+]
+
 { #category : 'steps' }
 FRFavoriteLoader >> register: aCloneDirectory for: aFavorite [
 	"Add the clone in aCloneDirectory to Iceberg, then put it on the favorite's branch; when it holds code the image already has, attach it to that code instead."
 
-	| repository |
-	repository := IceRepositoryCreator new
-		              location: aCloneDirectory;
-		              createRepository.
-	(self repositoryLoadedFrom: repository among: self repositoriesToAttach) ifNotNil: [ :loaded |
-		^ self attach: repository to: loaded ].
-	repository register.
-	^ self switch: repository to: aFavorite
+	^ self
+		  registerOrAttach: (IceRepositoryCreator new
+				   location: aCloneDirectory;
+				   createRepository)
+		  for: aFavorite
 ]
 
 { #category : 'attaching' }
-FRFavoriteLoader >> registerOrAttach: aClone [
-	"Register aClone in Iceberg, unless it holds code that the image loaded from a repository without clone: that repository then takes aClone over."
+FRFavoriteLoader >> registerOrAttach: aClone for: aFavorite [
+	"Register aClone in Iceberg and put it on aFavorite's branch, unless it holds code that the image loaded from a repository without clone: that repository then takes aClone over."
 
 	(self repositoryLoadedFrom: aClone among: self repositoriesToAttach) ifNotNil: [ :loaded | ^ self attach: aClone to: loaded ].
 	aClone register.
-	^ aClone
+	^ self switch: aClone to: aFavorite
 ]
 
 { #category : 'accessing' }
@@ -374,15 +416,22 @@ FRFavoriteLoader >> sourceDirectoryOf: aCloneDirectory [
 
 { #category : 'loading' }
 FRFavoriteLoader >> switch: anIceRepository to: aFavorite [
-	"Put an existing clone on the favorite's branch; ask before switching a clone with uncommitted changes."
+	"Put an existing clone on the favorite's branch; ask before switching a clone with uncommitted changes and, when the user declines, keep the clone where it is and tell the user. When the branch or tag does not exist, fall back on the first of #fallbackCommitishes that exists and tell the user; when none exists, keep the clone on its branch."
 
 	| commitish |
 	commitish := self commitishFor: aFavorite.
-	(commitish isNil or: [ anIceRepository head name = commitish ]) ifTrue: [ ^ anIceRepository ].
+	commitish ifNil: [ ^ anIceRepository ].
+	(self hasCommitishNamed: commitish in: anIceRepository) ifFalse: [
+			commitish := self fallbackCommitishIn: anIceRepository.
+			self report: (self missingBranchReportFor: aFavorite in: anIceRepository fallback: commitish).
+			commitish ifNil: [ ^ anIceRepository ] ].
+	anIceRepository head name = commitish ifTrue: [ ^ anIceRepository ].
 	(anIceRepository isModified and: [ (switchConfirmer value: anIceRepository) not ]) ifTrue: [
-			FRError signal: ('{1} has uncommitted changes; it was not switched to {2}' format: {
+			self report: ('{1} has uncommitted changes: the clone stays on {2} instead of switching to {3}.' format: {
 						 anIceRepository name.
-						 commitish }) ].
+						 anIceRepository head name.
+						 commitish }).
+			^ anIceRepository ].
 	anIceRepository switchToCommitishNamed: commitish.
 	^ anIceRepository
 ]

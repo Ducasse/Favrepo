@@ -198,7 +198,7 @@ FRApplication >> newLoader [
 		  catalog: self catalog;
 		  baselineChooser: [ :names | self chooseBaselineAmong: names ];
 		  switchConfirmer: [ :repository | self confirmSwitchOf: repository ];
-		  informer: [ :text | self report: text titled: 'Clone attached to the code of the image' ];
+		  informer: [ :text | self report: text titled: 'Favorite repositories' ];
 		  yourself
 ]
 
