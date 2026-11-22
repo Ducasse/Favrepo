@@ -106,13 +106,24 @@ FRUpstreamFinder >> ownerAndProjectOf: aUrl [
 
 { #category : 'finding' }
 FRUpstreamFinder >> upstreamUrlFor: aForkUrl [
-	"The https URL of the GitHub project aForkUrl was forked from: a known project with the same name and another owner. Nil when there is none."
+	"The URL of the GitHub project aForkUrl was forked from: a known project with the same name and another owner, with the protocol of aForkUrl (ssh for an ssh fork, https otherwise). Nil when there is none."
 
 	| fork |
 	fork := (self ownerAndProjectOf: aForkUrl) ifNil: [ ^ nil ].
 	self knownUrls do: [ :each |
-			(self ownerAndProjectOf: each) ifNotNil: [ :known |
-					((known second sameAs: fork second) and: [ (known first sameAs: fork first) not ]) ifTrue: [
-						^ 'https://github.com/{1}/{2}.git' format: known ] ] ].
+		(self ownerAndProjectOf: each) ifNotNil: [ :known |
+			((known second sameAs: fork second) and: [ (known first sameAs: fork first) not ]) ifTrue: [
+				^ (self urlFormatLike: aForkUrl) format: known ] ] ].
 	^ nil
+]
+
+{ #category : 'private' }
+FRUpstreamFinder >> urlFormatLike: aForkUrl [
+	"The format of a GitHub URL {1}/{2} (owner and project) that uses the protocol of aForkUrl."
+
+	^ ([ IceGitRemote url: aForkUrl ]
+		   on: Error
+		   do: [ nil ]) class = IceGitScpRemote
+		  ifTrue: [ 'git@github.com:{1}/{2}.git' ]
+		  ifFalse: [ 'https://github.com/{1}/{2}.git' ]
 ]

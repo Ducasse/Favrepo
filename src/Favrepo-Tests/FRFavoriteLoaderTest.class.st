@@ -64,6 +64,20 @@ FRFavoriteLoaderTest >> mustache [
 ]
 
 { #category : 'helpers' }
+FRFavoriteLoaderTest >> repositoryNamed: aName atCommit: anId [
+	"An Iceberg repository missing on disk and not registered, listing no package and whose code comes from the commit anId, like the image's pharo repository."
+
+	| repository |
+	repository := IceLibgitRepository new
+		              name: aName;
+		              yourself.
+	repository workingCopy referenceCommit: ((IceUnknownCommit inRepository: repository)
+		 id: anId;
+		 yourself).
+	^ repository
+]
+
+{ #category : 'helpers' }
 FRFavoriteLoaderTest >> repositoryNamed: aName packages: someNames [
 	"An Iceberg repository missing on disk and not registered, holding packages named someNames (loaded when the image has them)."
 
@@ -158,6 +172,16 @@ FRFavoriteLoaderTest >> testCloneAttachesToNothingWhenItHoldsNoLoadedPackage [
 ]
 
 { #category : 'tests - attaching' }
+FRFavoriteLoaderTest >> testCloneAttachesToNothingWhenItLacksTheCommitOfARepositoryWithoutPackages [
+	"A repository listing no package is taken over only by a clone that has its commit."
+
+	| clone pharo |
+	clone := self gitRepositoryWithBranch: 'dev'.
+	pharo := self repositoryNamed: 'pharo' atCommit: '0123456789abcdef0123456789abcdef01234567'.
+	self assert: (self loader repositoryLoadedFrom: clone among: { pharo }) isNil
+]
+
+{ #category : 'tests - attaching' }
 FRFavoriteLoaderTest >> testCloneAttachesToTheRepositoryItCoversBest [
 	"The image's pharo repository lists the Spec2 packages too; a Spec fork must take over Spec2, whose loaded packages it holds all, not pharo."
 
@@ -185,6 +209,21 @@ FRFavoriteLoaderTest >> testCloneAttachesToTheRepositoryWhoseLoadedPackagesItHol
 					 other.
 					 loaded })
 		identicalTo: loaded
+]
+
+{ #category : 'tests - attaching' }
+FRFavoriteLoaderTest >> testCloneAttachesToTheRepositoryWithoutPackagesWhoseCommitItHas [
+	"The image's pharo repository lists no package: a Pharo fork takes it over because the clone has the commit the image was built from."
+
+	| clone pharo other |
+	clone := self gitRepositoryWithBranch: 'dev'.
+	other := self repositoryNamed: 'other' atCommit: '0123456789abcdef0123456789abcdef01234567'.
+	pharo := self repositoryNamed: 'pharo' atCommit: clone headCommit id.
+	self
+		assert: (self loader repositoryLoadedFrom: clone among: {
+			 other.
+			 pharo })
+		identicalTo: pharo
 ]
 
 { #category : 'tests' }

@@ -26,7 +26,7 @@ FRUpstreamFinderTest >> testImageKnowsTheUpstreamOfSpec [
 
 	self
 		assert: (FRUpstreamFinder new upstreamUrlFor: 'git@github.com:someone/spec.git')
-		equals: 'https://github.com/pharo-spec/Spec.git'
+		equals: 'git@github.com:pharo-spec/Spec.git'
 ]
 
 { #category : 'tests' }
@@ -45,13 +45,29 @@ FRUpstreamFinderTest >> testUnknownProjectHasNoUpstream [
 { #category : 'tests' }
 FRUpstreamFinderTest >> testUpstreamMatchesHttpsKnownUrls [
 
-	self
-		assert: (self finder upstreamUrlFor: 'git@github.com:Ducasse/pharo.git')
-		equals: 'https://github.com/pharo-project/pharo.git'
+	self assert: (self finder upstreamUrlFor: 'git@github.com:Ducasse/pharo.git') equals: 'git@github.com:pharo-project/pharo.git'
 ]
 
 { #category : 'tests' }
 FRUpstreamFinderTest >> testUpstreamOfAForkIsTheKnownProjectWithTheSameName [
 
-	self assert: (self finder upstreamUrlFor: 'git@github.com:Ducasse/spec.git') equals: 'https://github.com/pharo-spec/Spec.git'
+	self assert: (self finder upstreamUrlFor: 'git@github.com:Ducasse/spec.git') equals: 'git@github.com:pharo-spec/Spec.git'
+]
+
+{ #category : 'tests' }
+FRUpstreamFinderTest >> testUpstreamOfAnHttpsForkUsesHttps [
+	"A fork cloned with https gets its upstream with https too."
+
+	self
+		assert: (self finder upstreamUrlFor: 'https://github.com/Ducasse/pharo.git')
+		equals: 'https://github.com/pharo-project/pharo.git'
+]
+
+{ #category : 'tests' }
+FRUpstreamFinderTest >> testUpstreamOfAnSshUrlForkUsesSsh [
+	"A fork cloned with an ssh:// URL gets its upstream with ssh too."
+
+	self
+		assert: (self finder upstreamUrlFor: 'ssh://git@github.com/Ducasse/pharo.git')
+		equals: 'git@github.com:pharo-project/pharo.git'
 ]

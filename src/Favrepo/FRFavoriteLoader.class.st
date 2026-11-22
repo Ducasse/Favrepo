@@ -178,6 +178,19 @@ FRFavoriteLoader >> clone: aFavorite [
 	^ self registerOrAttach: repository for: aFavorite
 ]
 
+{ #category : 'attaching' }
+FRFavoriteLoader >> clone: aClone hasTheCommitOfPackagelessRepository: aRepository [
+	"Whether aRepository lists no package and its code comes from a commit that aClone has."
+
+	| id |
+	aRepository workingCopy packages ifNotEmpty: [ ^ false ].
+	id := aRepository workingCopy referenceCommit id.
+	id ifNil: [ ^ false ].
+	^ [ (aClone lookupCommit: id) isUnknownCommit not ]
+		  on: Error
+		  do: [ false ]
+]
+
 { #category : 'steps' }
 FRFavoriteLoader >> cloneDirectoryFor: aFavorite [
 	"Where Iceberg puts the clone of aFavorite: <clones location>/<owner>/<project>."
@@ -374,23 +387,24 @@ FRFavoriteLoader >> repositoryFor: aFavorite [
 
 { #category : 'attaching' }
 FRFavoriteLoader >> repositoryLoadedFrom: aClone among: someRepositories [
-	"The repository among someRepositories whose loaded packages aClone holds best (the most covered, then the most packages), or nil when aClone holds none of their loaded packages."
+	"The repository among someRepositories whose loaded packages aClone holds best (the most covered, then the most packages); failing that, one that lists no package (like the image's pharo repository) whose code comes from a commit aClone has; nil otherwise."
 
 	| cloneNames best bestScore |
 	cloneNames := aClone workingCopy packageNames asSet.
 	best := nil.
 	bestScore := { 0. 0 }.
 	someRepositories do: [ :each |
-			| loadedNames held score |
-			loadedNames := each workingCopy packages select: [ :package | package isLoaded ] thenCollect: [ :package | package name ].
-			held := loadedNames count: [ :name | cloneNames includes: name ].
-			score := {
-				         (held / (loadedNames size max: 1)).
-				         held }.
-			(held > 0 and: [ self score: score isBetterThan: bestScore ]) ifTrue: [
-					best := each.
-					bestScore := score ] ].
-	^ best
+		| loadedNames held score |
+		loadedNames := each workingCopy packages select: [ :package | package isLoaded ] thenCollect: [ :package | package name ].
+		held := loadedNames count: [ :name | cloneNames includes: name ].
+		score := {
+			         (held / (loadedNames size max: 1)).
+			         held }.
+		(held > 0 and: [ self score: score isBetterThan: bestScore ]) ifTrue: [
+			best := each.
+			bestScore := score ] ].
+	^ best ifNil: [
+		  someRepositories detect: [ :each | self clone: aClone hasTheCommitOfPackagelessRepository: each ] ifNone: [ nil ] ]
 ]
 
 { #category : 'attaching' }
