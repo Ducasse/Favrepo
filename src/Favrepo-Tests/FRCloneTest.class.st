@@ -40,6 +40,13 @@ FRCloneTest >> testBottomBranchNameIsTheIsoDateThenBottom [
 	self assert: (FRClone bottomBranchNameOn: (Date year: 2026 month: 11 day: 5)) equals: '2026-11-05-Bottom'
 ]
 
+{ #category : 'tests' }
+FRCloneTest >> testCloneAtUnknownImageCommitIsNotBasedOnIt [
+	"Nothing can be compared with a commit the clone does not have."
+
+	self deny: ((self cloneOnDiskAtUnknownCommit: self unknownCommitId) isBasedOn: self unknownCommitId)
+]
+
 { #category : 'tests - matching' }
 FRCloneTest >> testCloneBelongsToNothingWhenItHoldsNoLoadedPackage [
 	"Sharing only packages that are not in the image does not count."
@@ -78,6 +85,50 @@ FRCloneTest >> testCloneBelongsToTheRepositoryWhoseLoadedPackagesItHolds [
 				 other.
 				 loaded })
 		identicalTo: loaded
+]
+
+{ #category : 'tests' }
+FRCloneTest >> testCloneIsBasedOnAnAncestorOfItsCommit [
+	"Committing in the clone keeps the image comparable with it."
+
+	| clone base |
+	clone := self cloneWithBranch: 'dev'.
+	base := clone referenceCommitId.
+	self commitEmptyIn: clone.
+	self deny: clone referenceCommitId equals: base.
+	self assert: (clone isBasedOn: base)
+]
+
+{ #category : 'tests' }
+FRCloneTest >> testCloneIsBasedOnItsCommit [
+
+	| clone |
+	clone := self cloneWithBranch: 'dev'.
+	self assert: (clone isBasedOn: clone referenceCommitId)
+]
+
+{ #category : 'tests' }
+FRCloneTest >> testCloneIsNotBasedOnACommitItDoesNotHave [
+
+	self deny: ((self cloneWithBranch: 'dev') isBasedOn: self unknownCommitId)
+]
+
+{ #category : 'tests' }
+FRCloneTest >> testCloneIsNotBasedOnALaterCommit [
+	"The clone went back behind the commit of the image."
+
+	| clone later |
+	clone := self cloneWithBranch: 'dev'.
+	self commitEmptyIn: clone.
+	later := clone referenceCommitId.
+	clone switchTo: 'dev'.
+	self deny: (clone isBasedOn: later)
+]
+
+{ #category : 'tests' }
+FRCloneTest >> testCloneMissingOnDiskIsBasedOnNothing [
+
+	self deny: (FRClone instanceMissingOnDisk isBasedOn: self unknownCommitId)
 ]
 
 { #category : 'tests - matching' }

@@ -46,6 +46,27 @@ FRPharoClone class >> instanceMissingOnDisk [
 			   yourself)
 ]
 
+{ #category : 'instance creation' }
+FRPharoClone class >> registered [
+	"The clone of Pharo registered in Iceberg, or nil."
+
+	^ self registeredAmong: IceRepository registry
+]
+
+{ #category : 'instance creation' }
+FRPharoClone class >> registeredAmong: someRepositories [
+	"The clone of Pharo on disk among someRepositories, or nil; when there are several, the one the image can be compared with."
+
+	| clones |
+	clones := someRepositories
+		          select: [ :each | each isMissing not and: [ self canHandle: each ] ]
+		          thenCollect: [ :each | self newOn: each ].
+	^ clones detect: [ :each | each isBasedOnImageCommit ] ifNone: [
+		  clones
+			  ifEmpty: [ nil ]
+			  ifNotEmpty: [ clones first ] ]
+]
+
 { #category : 'matching' }
 FRPharoClone >> imageRepositoryAmong: someRepositories [
 	"The repository of the image itself: its code comes from the commit the image was built from. I may be a fork that is behind and lacks that commit."
@@ -59,7 +80,16 @@ FRPharoClone >> imageRepositoryAmong: someRepositories [
 FRPharoClone >> isAtImageCommit [
 	"Whether the image code comes from the commit the image was built from, known by the clone or not."
 
-	^ self referenceCommitId = self class imageCommitId
+	| id |
+	id := self referenceCommitId.
+	^ id isNotNil and: [ id = self class imageCommitId ]
+]
+
+{ #category : 'testing' }
+FRPharoClone >> isBasedOnImageCommit [
+	"Whether the image can be compared with me: its code comes from the commit it was built from, or from one made on top of it."
+
+	^ self isBasedOn: self class imageCommitId
 ]
 
 { #category : 'baselines' }
@@ -67,4 +97,12 @@ FRPharoClone >> loadBaselineFor: aLoader [
 	"Pharo is the running system and its baseline does not load like the others."
 
 	aLoader report: ('The baseline of {1} was not loaded: Pharo is the running system.' format: { self name })
+]
+
+{ #category : 'reporting' }
+FRPharoClone >> notBasedOnImageCommitReport [
+
+	^ 'The clone {1} is not on the commit the image was built from ({2}): its differences with the image are not your changes. Fetch the upstream in Iceberg, then switch to a branch holding that commit.' format: {
+		  self name.
+		  (self class imageCommitId ifNil: [ 'unknown' ]) }
 ]

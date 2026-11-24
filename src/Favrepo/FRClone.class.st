@@ -150,6 +150,18 @@ FRClone >> imageRepositoryAmong: someRepositories [
 ]
 
 { #category : 'testing' }
+FRClone >> isBasedOn: aCommitId [
+	"Whether the image code comes from the commit aCommitId or from one made on top of it, and I have both."
+
+	| base ancestor |
+	(aCommitId isEmptyOrNil or: [ self referenceCommitId isNil or: [ iceRepository isMissing or: [ self isImageCommitUnknown ] ] ]) ifTrue: [ ^ false ].
+	base := iceRepository lookupCommit: aCommitId.
+	base isUnknownCommit ifTrue: [ ^ false ].
+	ancestor := iceRepository workingCopy referenceCommit commonAncestorWith: base.
+	^ ancestor isNotNil and: [ ancestor id = base id ]
+]
+
+{ #category : 'testing' }
 FRClone >> isImageCommitUnknown [
 	"Whether I do not have the commit the image code comes from (Iceberg's Fetch required)."
 

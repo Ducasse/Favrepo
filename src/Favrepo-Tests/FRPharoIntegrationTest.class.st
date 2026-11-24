@@ -1,13 +1,9 @@
 "
-I test `FRPharoIntegration` without touching any repository: matching favorites to the external projects of `BaselineOfPharo`, the rewrite of the method, branch names, and the checks done before creating anything.
-
-```
-FRPharoIntegrationTest suite run
-```
+I test `FRPharoIntegration`: matching favorites to the external projects of `BaselineOfPharo`, the rewrite of the method, branch names, and the checks done before creating anything. Only throwaway repositories are touched.
 "
 Class {
 	#name : 'FRPharoIntegrationTest',
-	#superclass : 'TestCase',
+	#superclass : 'FRGitRepositoryTestCase',
 	#category : 'Favrepo-Tests',
 	#package : 'Favrepo-Tests'
 }
@@ -72,6 +68,19 @@ FRPharoIntegrationTest >> testCreateForANonExternalProjectRaisesError [
 ]
 
 { #category : 'tests - errors' }
+FRPharoIntegrationTest >> testCreateInACloneWithoutTheImageCommitTellsToFetch [
+	"The clone is behind the image: BaselineOfPharo differs although the user changed nothing. Telling them to discard would downgrade the image."
+
+	| pharo |
+	pharo := self gitRepositoryWithBranch: 'dev'.
+	pharo workingCopy addPackage: (IcePackage named: 'BaselineOfPharo' repository: pharo).
+	self
+		should: [ (self integrationFor: 'git@github.com:Ducasse/NewTools.git') check: 'fix-x' canBeCreatedIn: pharo and: pharo ]
+		raise: FRError
+		withExceptionDo: [ :error | self assert: (error messageText includesSubstring: 'Fetch') ]
+]
+
+{ #category : 'tests - errors' }
 FRPharoIntegrationTest >> testCreateWithoutCloneRaisesError [
 	"NewTools is an external project, but the catalog knows no clone of it."
 
@@ -109,13 +118,6 @@ FRPharoIntegrationTest >> testNonExternalProjectHasNoIntegrationBranch [
 
 	self deny: (FRPharoIntegration favorite: (FRFavorite url: 'git@github.com:Ducasse/Favrepo.git') catalog: FRCatalog current)
 			hasPharoIntegrationBranch
-]
-
-{ #category : 'tests' }
-FRPharoIntegrationTest >> testPharoRepositoryHoldsBaselineOfPharo [
-
-	self assert:
-		((self integrationFor: 'git@github.com:Ducasse/NewTools.git') pharoRepository includesPackageNamed: 'BaselineOfPharo')
 ]
 
 { #category : 'tests' }

@@ -43,6 +43,16 @@ FRGitRepositoryTestCase >> cloneWithBranch: aBranchName [
 ]
 
 { #category : 'helpers' }
+FRGitRepositoryTestCase >> commitEmptyIn: aClone [
+	"Commit in aClone, on its current branch, without changing anything."
+
+	| workingCopy commit |
+	workingCopy := aClone iceRepository workingCopy.
+	commit := aClone iceRepository commitIndexWithMessage: 'Another commit' andParents: { workingCopy referenceCommit }.
+	workingCopy referenceCommit: commit
+]
+
+{ #category : 'helpers' }
 FRGitRepositoryTestCase >> deleteGitRepository: aRepositoryOrNil [
 
 	| location |

@@ -62,6 +62,30 @@ FRPharoCloneTest >> testPackagelessCloneAtTheImageCommitIsAPharoClone [
 	self assert: (FRClone on: (self repositoryNamed: 'pharo' atCommit: FRPharoClone imageCommitId)) class equals: FRPharoClone
 ]
 
+{ #category : 'tests - registered' }
+FRPharoCloneTest >> testRegisteredIsACloneOfPharoOnDisk [
+
+	| pharo |
+	pharo := self cloneOnDiskAtUnknownCommit: FRPharoClone imageCommitId.
+	self
+		assert: (FRPharoClone registeredAmong: {
+				 (self repositoryNamed: 'Other' packages: #( 'Favrepo' )).
+				 pharo iceRepository }) iceRepository
+		identicalTo: pharo iceRepository
+]
+
+{ #category : 'tests - registered' }
+FRPharoCloneTest >> testRegisteredIsNilWhenPharoIsMissingOnDisk [
+
+	self assert: (FRPharoClone registeredAmong: { (self repositoryNamed: 'pharo' atCommit: FRPharoClone imageCommitId) }) isNil
+]
+
+{ #category : 'tests - registered' }
+FRPharoCloneTest >> testRegisteredIsNilWithoutCloneOfPharo [
+
+	self assert: (FRPharoClone registeredAmong: { (self gitRepositoryWithBranch: 'dev') }) isNil
+]
+
 { #category : 'tests' }
 FRPharoCloneTest >> testRepositoryWithNothingLoadedIsNotTheOneOfTheImage [
 	"It has no reference commit."

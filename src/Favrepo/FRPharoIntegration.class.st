@@ -1,41 +1,30 @@
 "
-I validate a branch of a Pharo external project (NewTools, Spec, Roassal…) in the full Pharo build: I create the branch in the clone of the project and, in the Pharo fork, a branch whose `BaselineOfPharo` loads it from the project's fork. A pull request of that Pharo branch makes the Pharo CI build the whole system with it.
+I validate a branch of a Pharo external project (NewTools, Spec, Roassal…) in the full Pharo build: I create the branch in the clone of the project and, in the Pharo fork, a branch whose `BaselineOfPharo` loads it from the project's fork. A pull request of that Pharo branch makes the Pharo CI build the whole system with it. Key messages are `isExternalProject`, `createBranch:` and `hasPharoIntegrationBranch`.
 
-## Responsibility:
-
-- I know whether a favorite is a Pharo external project: its GitHub project name is the `project:` of a `BaselineOfPharo` class method marked `<externalProject>`.
-- I create the two branches, both or none: everything is checked first (valid new name, not a bottom branch, Pharo clone from a fork, nothing else changed in `BaselineOfPharo`), and the user confirms when a clone is not on a bottom branch (`<ISO date>-Bottom`).
-- In Pharo I rewrite only the `owner:` and `version:` of the project's method, commit that alone, push it to the Pharo fork, then put Pharo back on its base branch with the original method: the Pharo branch is only the vehicle of the pull request. The project's branch stays checked out and local: the developer commits and pushes there.
-
-## Collaborators:
-
-- `FRCatalog` gives the clone of the favorite; the Pharo clone is the Iceberg repository holding `BaselineOfPharo`.
-- `IceRepository`, `IceWorkingCopy` and `IceDiff` create the branches, commit `BaselineOfPharo` alone and push.
-- `FRApplication` gives me the confirmer block and opens the pull request dialog (`FRPharoPullRequestPresenter`).
-
-## Public API and Key Messages
-
-- `FRPharoIntegration favorite: aFavorite catalog: aCatalog`, then `confirmer:`.
-- `isExternalProject`, `createBranch: aName` (answers the report, nil when cancelled).
-- `hasPharoIntegrationBranch`, `isIntegrationBranchPushed`, `integrationPharoBranch` for the pull request.
-- Class side: `rewrite:owner:version:`, `validateBranchName:`, `isBottomBranchName:`, `isUpstreamPharo:`.
+## Examples
 
 ```
-(FRPharoIntegration favorite: (FRFavorite url: 'git@github.com:Ducasse/NewTools.git') catalog: FRCatalog current)
-	isExternalProject ""true""
+FRPharoIntegration instanceNewTools
 ```
 
-See `FRPharoIntegration class >> #exampleNewTools` and `docs/pharo-integration-branches.md`.
+## Design Rationale
 
-## Internal Representation
+- A favorite is an external project when its GitHub project name is the `project:` of a `BaselineOfPharo` class method marked `<externalProject>`.
+- Everything is checked before the two branches are created: valid new name, not a bottom branch, Pharo clone from a fork, nothing else changed in `BaselineOfPharo`. The user confirms when a clone is not on a bottom branch (`<ISO date>-Bottom`).
+- The Pharo clone must be on the commit the image was built from, or on one made on top of it. Otherwise the differences of `BaselineOfPharo` are not changes of the user, and discarding them would downgrade the image.
+- In Pharo I rewrite only the `owner:` and `version:` of the project's method and commit that alone, then put Pharo back on its base branch with the original method: the Pharo branch is only the vehicle of the pull request. The project's branch stays checked out and local: the developer commits and pushes there.
 
-- `favorite`: the external project's favorite; `catalog`: where its clone is found.
-- `confirmer`: a block answering whether to build on a branch that is not a bottom branch.
-- `pharoRepository`: nil means the Iceberg repository holding `BaselineOfPharo`.
+## Usage
 
-### Implementation Points
+1. `FRApplication>>newPharoIntegrationFor:` creates me for a favorite, with a `confirmer:` block.
+2. `createBranch:` answers the report to show, or nil when the user cancelled.
+3. `FRApplication>>openPullRequestFor:` opens the pull request dialog (`FRPharoPullRequestPresenter`) on my `checkedPharoRepository` and `integrationPharoBranch`.
+4. `FRCatalog` gives the clone of the favorite and `FRPharoClone` class side `registered` the one of Pharo, which I keep once found: create another instance after the registered clones changed.
 
-The rewrite replaces the two argument literals by their source intervals, so the rest of the method keeps its layout and the commit is a one-line change.
+## Implementation Notes
+
+- The rewrite replaces the two argument literals by their source intervals, so the rest of the method keeps its layout and the commit is a one-line change.
+- An error between the creation of the branches and the push undoes nothing: the branches stay.
 "
 Class {
 	#name : 'FRPharoIntegration',
@@ -49,13 +38,6 @@ Class {
 	#category : 'Favrepo',
 	#package : 'Favrepo'
 }
-
-{ #category : 'examples' }
-FRPharoIntegration class >> exampleNewTools [
-	"The integration of a fork of NewTools; it creates nothing until sent #createBranch:."
-
-	^ self favorite: (FRFavorite url: 'git@github.com:Ducasse/NewTools.git') catalog: FRCatalog current
-]
 
 { #category : 'external projects' }
 FRPharoIntegration class >> externalProjectMethods [
@@ -73,6 +55,14 @@ FRPharoIntegration class >> favorite: aFavorite catalog: aCatalog [
 	^ self new
 		  setFavorite: aFavorite catalog: aCatalog;
 		  yourself
+]
+
+{ #category : 'instances' }
+FRPharoIntegration class >> instanceNewTools [
+	"The integration of a fork of NewTools; it creates nothing until sent #createBranch:."
+
+	<sampleInstance>
+	^ self favorite: (FRFavorite url: 'git@github.com:Ducasse/NewTools.git') catalog: FRCatalog current
 ]
 
 { #category : 'testing' }
@@ -159,6 +149,7 @@ FRPharoIntegration >> check: aName canBeCreatedIn: anExternalRepository and: aPh
 	self class validateBranchName: aName.
 	self check: aName isNewIn: anExternalRepository.
 	self check: aName isNewIn: aPharoRepository.
+	self checkIsBasedOnImageCommit: (FRPharoClone newOn: aPharoRepository).
 	self checkBaselineOfPharoIsUnchangedIn: aPharoRepository
 ]
 
@@ -180,6 +171,13 @@ FRPharoIntegration >> checkBaselineOfPharoIsUnchangedIn: aPharoRepository [
 ]
 
 { #category : 'checking' }
+FRPharoIntegration >> checkIsBasedOnImageCommit: aPharoClone [
+	"Otherwise the differences of BaselineOfPharo are not changes of the user, and they must not be told to discard them."
+
+	aPharoClone isBasedOnImageCommit ifFalse: [ FRError signal: aPharoClone notBasedOnImageCommitReport ]
+]
+
+{ #category : 'checking' }
 FRPharoIntegration >> checkedExternalRepository [
 
 	self isExternalProject ifFalse: [ FRError signal: ('{1} is not a Pharo external project' format: { favorite name }) ].
@@ -191,7 +189,7 @@ FRPharoIntegration >> checkedPharoRepository [
 
 	| pharo |
 	pharo := self pharoRepository.
-	(pharo isNil or: [ pharo isMissing ]) ifTrue: [ FRError signal: 'Clone your Pharo fork first' ].
+	pharo ifNil: [ FRError signal: 'Clone your Pharo fork first' ].
 	(self class isUpstreamPharo: pharo origin url) ifTrue: [
 		FRError signal: 'Your Pharo clone must come from your fork, not from pharo-project/pharo' ].
 	^ pharo
@@ -317,8 +315,7 @@ FRPharoIntegration >> hasPharoIntegrationBranch [
 	| pharo name |
 	self isExternalProject ifFalse: [ ^ false ].
 	name := self integrationBranchName ifNil: [ ^ false ].
-	pharo := self pharoRepository.
-	(pharo isNil or: [ pharo isMissing ]) ifTrue: [ ^ false ].
+	pharo := self pharoRepository ifNil: [ ^ false ].
 	^ pharo hasLocalBranchNamed: name
 ]
 
@@ -358,10 +355,9 @@ FRPharoIntegration >> isIntegrationBranchPushed [
 
 { #category : 'accessing' }
 FRPharoIntegration >> pharoRepository [
-	"The Iceberg repository holding BaselineOfPharo, the package the integration branch changes."
+	"The Iceberg repository of the Pharo clone, the one the integration branch is created in, or nil."
 
-	^ pharoRepository ifNil: [
-		  pharoRepository := IceRepository registry detect: [ :each | each includesPackageNamed: 'BaselineOfPharo' ] ifNone: [ nil ] ]
+	^ pharoRepository ifNil: [ FRPharoClone registered ifNotNil: [ :clone | pharoRepository := clone iceRepository ] ]
 ]
 
 { #category : 'accessing' }
