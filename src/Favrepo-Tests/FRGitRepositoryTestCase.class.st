@@ -18,6 +18,31 @@ FRGitRepositoryTestCase class >> isAbstract [
 ]
 
 { #category : 'helpers' }
+FRGitRepositoryTestCase >> cloneNamed: aName packages: someNames [
+	"A clone missing on disk, holding packages named someNames."
+
+	^ FRClone on: (self repositoryNamed: aName packages: someNames)
+]
+
+{ #category : 'helpers' }
+FRGitRepositoryTestCase >> cloneOnDiskAtUnknownCommit: anId [
+	"A clone of gitRepository, on master, whose image code comes from anId, a commit it does not have: what attaching a fork that is behind gives."
+
+	| repository |
+	repository := self gitRepositoryWithBranch: 'dev'.
+	^ FRClone on: ((self repositoryNamed: 'pharo' atCommit: anId)
+			   location: repository location;
+			   yourself)
+]
+
+{ #category : 'helpers' }
+FRGitRepositoryTestCase >> cloneWithBranch: aBranchName [
+	"A clone on disk, on master, with a branch aBranchName."
+
+	^ FRClone on: (self gitRepositoryWithBranch: aBranchName)
+]
+
+{ #category : 'helpers' }
 FRGitRepositoryTestCase >> deleteGitRepository: aRepositoryOrNil [
 
 	| location |
@@ -81,4 +106,10 @@ FRGitRepositoryTestCase >> tearDown [
 
 	self deleteGitRepository: gitRepository.
 	super tearDown
+]
+
+{ #category : 'helpers' }
+FRGitRepositoryTestCase >> unknownCommitId [
+
+	^ '0123456789abcdef0123456789abcdef01234567'
 ]

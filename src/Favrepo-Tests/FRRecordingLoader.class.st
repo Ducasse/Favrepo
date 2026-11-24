@@ -43,7 +43,7 @@ FRRecordingLoader >> defineBottomBranchFor: aFavorite [
 
 	failure ifNotNil: [ FRError signal: failure ].
 	self bottomBranched add: aFavorite.
-	^ self bottomBranchNameOn: Date today
+	^ FRClone bottomBranchNameOn: Date today
 ]
 
 { #category : 'accessing' }
