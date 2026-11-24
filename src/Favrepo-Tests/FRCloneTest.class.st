@@ -40,6 +40,52 @@ FRCloneTest >> testBottomBranchNameIsTheIsoDateThenBottom [
 	self assert: (FRClone bottomBranchNameOn: (Date year: 2026 month: 11 day: 5)) equals: '2026-11-05-Bottom'
 ]
 
+{ #category : 'tests - matching' }
+FRCloneTest >> testCloneBelongsToNothingWhenItHoldsNoLoadedPackage [
+	"Sharing only packages that are not in the image does not count."
+
+	| clone unloaded |
+	clone := self cloneNamed: 'new-project' packages: #( 'NotLoaded-FRFixture' 'Favrepo' ).
+	unloaded := self repositoryNamed: 'Unloaded' packages: #( 'NotLoaded-FRFixture' ).
+	self assert: (clone imageRepositoryAmong: { unloaded }) isNil
+]
+
+{ #category : 'tests - matching' }
+FRCloneTest >> testCloneBelongsToTheRepositoryItCoversBest [
+	"The image's pharo repository lists the Spec2 packages too; a Spec fork must take over Spec2, whose loaded packages it holds all, not pharo."
+
+	| clone spec pharo |
+	clone := self cloneNamed: 'spec' packages: #( 'Favrepo' 'Favrepo-Spec' ).
+	spec := self repositoryNamed: 'Spec2' packages: #( 'Favrepo' 'Favrepo-Spec' ).
+	pharo := self repositoryNamed: 'pharo' packages: #( 'Favrepo' 'Favrepo-Spec' 'Favrepo-Tests' 'Kernel' ).
+	self
+		assert: (clone imageRepositoryAmong: {
+				 pharo.
+				 spec })
+		identicalTo: spec
+]
+
+{ #category : 'tests - matching' }
+FRCloneTest >> testCloneBelongsToTheRepositoryWhoseLoadedPackagesItHolds [
+	"The fork of a project that came with the image takes over its loaded packages."
+
+	| clone loaded other |
+	clone := self cloneNamed: 'favrepo-fork' packages: #( 'Favrepo' 'Favrepo-Spec' ).
+	loaded := self repositoryNamed: 'Favrepo' packages: #( 'Favrepo' 'Favrepo-Spec' ).
+	other := self repositoryNamed: 'Other' packages: #( 'Favrepo-Tests' ).
+	self
+		assert: (clone imageRepositoryAmong: {
+				 other.
+				 loaded })
+		identicalTo: loaded
+]
+
+{ #category : 'tests - matching' }
+FRCloneTest >> testCloneWithoutBaselineOfPharoDoesNotBelongToTheRepositoryOfTheImage [
+
+	self assert: ((self cloneWithBranch: 'dev') imageRepositoryAmong: { (self repositoryNamed: 'pharo' atCommit: FRPharoClone imageCommitId) }) isNil
+]
+
 { #category : 'tests - branches' }
 FRCloneTest >> testFallbackCommitishIsTheFirstThatExists [
 

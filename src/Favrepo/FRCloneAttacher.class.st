@@ -10,7 +10,7 @@ FRCloneAttacher instanceSpec
 ## Design Rationale
 
 - A clone of code that is in the image takes over the repository that came with the image instead of being registered apart: two repositories for the same code confuse Iceberg and the user.
-- A clone of Pharo is recognized by its content (`BaselineOfPharo`), never by its commits: forks lag behind the image.
+- Which repository a clone belongs to is the business of `FRClone`: it depends on the kind of clone.
 - Once attached, the parent of the fork is added as a remote and fetched, as Iceberg does when it clones a fork, then a branch `image-<commit>` is checked out at the commit the image was built from. Nothing is loaded: the image and the clone are in sync, and commits go to the fork (origin).
 - When that commit is still unknown I adopt no other one: it would turn all the commits in between into changes of the user. The repository stays in the Fetch required state of Iceberg.
 
@@ -72,19 +72,6 @@ FRCloneAttacher >> attach: aClone to: aLoadedRepository [
 	Iceberg announcer announce: (IceRepositoryModified for: aLoadedRepository).
 	self report: (self reportFor: aLoadedRepository branch: branch upstream: upstream).
 	^ aLoadedRepository
-]
-
-{ #category : 'matching' }
-FRCloneAttacher >> clone: aClone hasTheCommitOfPackagelessRepository: aRepository [
-	"Whether aRepository lists no package and its code comes from a commit that aClone has."
-
-	| id |
-	aRepository workingCopy packages ifNotEmpty: [ ^ false ].
-	id := aRepository workingCopy referenceCommit id.
-	id ifNil: [ ^ false ].
-	^ [ (aClone lookupCommit: id) isUnknownCommit not ]
-		  on: Error
-		  do: [ false ]
 ]
 
 { #category : 'upstream' }
@@ -160,66 +147,10 @@ FRCloneAttacher >> repositoriesWithoutClone [
 ]
 
 { #category : 'matching' }
-FRCloneAttacher >> repositoryBestHeldBy: aClone among: someRepositories [
-	"The repository among someRepositories whose loaded packages aClone holds best (the most covered, then the most packages), or nil when aClone holds none of their loaded packages."
+FRCloneAttacher >> repositoryLoadedFrom: anIceRepository [
+	"The repository of the image without clone that anIceRepository is a clone of, or nil."
 
-	| cloneNames best bestScore |
-	cloneNames := aClone workingCopy packageNames asSet.
-	best := nil.
-	bestScore := { 0. 0 }.
-	someRepositories do: [ :each |
-		| score |
-		score := self scoreOf: each heldBy: cloneNames.
-		(score second > 0 and: [ self score: score isBetterThan: bestScore ]) ifTrue: [
-			best := each.
-			bestScore := score ] ].
-	^ best
-]
-
-{ #category : 'matching' }
-FRCloneAttacher >> repositoryLoadedFrom: aClone [
-	"The repository of the image without clone that aClone is a clone of, or nil."
-
-	^ self repositoryLoadedFrom: aClone among: self repositoriesWithoutClone
-]
-
-{ #category : 'matching' }
-FRCloneAttacher >> repositoryLoadedFrom: aClone among: someRepositories [
-	"The repository among someRepositories that aClone is a clone of: the one of the image itself for a clone of Pharo; otherwise the one whose loaded packages aClone holds best; failing that, one that lists no package whose code comes from a commit aClone has; nil otherwise."
-
-	^ (self repositoryOfTheImageAmong: someRepositories for: aClone) ifNil: [
-		  (self repositoryBestHeldBy: aClone among: someRepositories) ifNil: [
-			  someRepositories detect: [ :each | self clone: aClone hasTheCommitOfPackagelessRepository: each ] ifNone: [ nil ] ] ]
-]
-
-{ #category : 'matching' }
-FRCloneAttacher >> repositoryOfTheImageAmong: someRepositories for: aClone [
-	"The repository of the Pharo image itself (its code comes from the commit the image was built from) when aClone is a clone of Pharo, nil otherwise. The fork may be behind: whether aClone has that commit does not matter."
-
-	(aClone workingCopy packageNames includes: 'BaselineOfPharo') ifFalse: [ ^ nil ].
-	^ someRepositories
-		  detect: [ :each | each workingCopy referenceCommit id = SystemVersion current commitHash ]
-		  ifNone: [ nil ]
-]
-
-{ #category : 'matching' }
-FRCloneAttacher >> score: aScore isBetterThan: anotherScore [
-	"Scores are {coverage. count}; compare the coverage first, then the count."
-
-	aScore first = anotherScore first ifFalse: [ ^ aScore first > anotherScore first ].
-	^ aScore second > anotherScore second
-]
-
-{ #category : 'matching' }
-FRCloneAttacher >> scoreOf: aRepository heldBy: someNames [
-	"How well someNames cover the loaded packages of aRepository: {coverage. count}."
-
-	| loadedNames held |
-	loadedNames := aRepository workingCopy packages select: [ :package | package isLoaded ] thenCollect: [ :package | package name ].
-	held := loadedNames count: [ :name | someNames includes: name ].
-	^ {
-		  (held / (loadedNames size max: 1)).
-		  held }
+	^ (FRClone on: anIceRepository) imageRepositoryAmong: self repositoriesWithoutClone
 ]
 
 { #category : 'attaching' }

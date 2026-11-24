@@ -1,5 +1,5 @@
 "
-I represent a clone of a project: its Iceberg repository, seen by the favorites tool. I know its baselines and branches, and how to load it. Key messages are `loadBaselineFor:`, `switchTo:` and `createBottomBranch`.
+I represent a clone of a project: its Iceberg repository, seen by the favorites tool. I know its baselines and branches, how to load it, and which repository of the image it belongs to. Key messages are `loadBaselineFor:`, `switchTo:`, `createBottomBranch` and `imageRepositoryAmong:`.
 
 ## Examples
 
@@ -9,14 +9,16 @@ FRClone instanceMissingOnDisk
 
 ## Design Rationale
 
+- `on:` picks the kind of clone by its content (`canHandle:`), so that the rest of the tool has no special case: `FRPharoClone` is the one for the running system.
 - What Iceberg knows is asked to Iceberg and never read again on disk: the source directory (`IceLibgitRepository>>codeDirectory`, from the .project file) and the baselines (`IcePackage>>isMetacelloBaseline`).
+- I belong to the repository whose loaded packages I cover best. The most covered wins before the most packages: the repository of Pharo may list the packages of the projects that came with it.
 - I ask nothing to the user: the loader given to `loadBaselineFor:` does.
 - When the commit of the image code is unknown to me I refuse a bottom branch: it would be at a commit unrelated to the image.
 
 ## Usage
 
-1. `FRFavoriteLoader` creates me with `on:` around the Iceberg repository it cloned, registered, attached or found in the catalog.
-2. It sends me `switchTo:`, `loadBaselineFor:` or `createBottomBranch`, and forgets me.
+1. `FRFavoriteLoader` and `FRCloneAttacher` create me with `on:` around the Iceberg repository they cloned, registered, attached or found in the catalog.
+2. `FRCloneAttacher>>repositoryLoadedFrom:` sends me `imageRepositoryAmong:`; `FRFavoriteLoader` sends me `switchTo:`, `loadBaselineFor:` or `createBottomBranch`. Then they forget me.
 
 I hold no state but the repository, so two clones on the same repository are interchangeable.
 
@@ -24,6 +26,7 @@ I hold no state but the repository, so two clones on the same repository are int
 
 - `switchTo:` loads no code but adopts the commit checked out. Check `isImageCommitUnknown` before it: the image would be compared with an unrelated commit.
 - `referenceCommitId` is nil when there is no reference commit, because `IceNoCommit` does not understand `id`.
+- My subclasses define `canHandle:` on their class side; I am the one used when none can handle the repository.
 "
 Class {
 	#name : 'FRClone',
@@ -62,8 +65,9 @@ FRClone class >> newOn: anIceRepository [
 
 { #category : 'instance creation' }
 FRClone class >> on: anIceRepository [
+	"The kind of clone that can handle anIceRepository."
 
-	^ self newOn: anIceRepository
+	^ (self allSubclasses detect: [ :each | each canHandle: anIceRepository ] ifNone: [ self ]) newOn: anIceRepository
 ]
 
 { #category : 'baselines' }
@@ -129,6 +133,22 @@ FRClone >> iceRepository [
 	^ iceRepository
 ]
 
+{ #category : 'matching' }
+FRClone >> imageRepositoryAmong: someRepositories [
+	"The repository among someRepositories whose loaded packages I hold best (the most covered, then the most packages), or nil when I hold none of their loaded packages."
+
+	| best bestScore |
+	best := nil.
+	bestScore := { 0. 0 }.
+	someRepositories do: [ :each |
+		| score |
+		score := self scoreOf: each.
+		(score second > 0 and: [ self score: score isBetterThan: bestScore ]) ifTrue: [
+			best := each.
+			bestScore := score ] ].
+	^ best
+]
+
 { #category : 'testing' }
 FRClone >> isImageCommitUnknown [
 	"Whether I do not have the commit the image code comes from (Iceberg's Fetch required)."
@@ -142,20 +162,10 @@ FRClone >> isModified [
 	^ iceRepository isModified
 ]
 
-{ #category : 'testing' }
-FRClone >> isPharo [
-	"Whether I am a clone of Pharo: I hold its baseline or, when my commit is unknown and I list no package, the image was built from that commit."
-
-	(iceRepository workingCopy packageNames includes: 'BaselineOfPharo') ifTrue: [ ^ true ].
-	^ iceRepository workingCopy packages isEmpty and: [ self referenceCommitId = SystemVersion current commitHash ]
-]
-
 { #category : 'baselines' }
 FRClone >> loadBaselineFor: aLoader [
-	"Load the baseline that aLoader chooses with Metacello, except the one of Pharo: it is the running system and its baseline does not load like the others."
+	"Load the baseline that aLoader chooses."
 
-	self isPharo ifTrue: [
-		^ aLoader report: ('The baseline of {1} was not loaded: Pharo is the running system.' format: { self name }) ].
 	self loadBaselineNamed: (aLoader baselineToLoadOf: self)
 ]
 
@@ -191,6 +201,27 @@ FRClone >> referenceCommitId [
 	^ (commit isCollection or: [ commit isNoCommit ])
 		  ifTrue: [ nil ]
 		  ifFalse: [ commit id ]
+]
+
+{ #category : 'matching' }
+FRClone >> score: aScore isBetterThan: anotherScore [
+	"Scores are {coverage. count}; compare the coverage first, then the count."
+
+	aScore first = anotherScore first ifFalse: [ ^ aScore first > anotherScore first ].
+	^ aScore second > anotherScore second
+]
+
+{ #category : 'matching' }
+FRClone >> scoreOf: aRepository [
+	"How well I cover the loaded packages of aRepository: {coverage. count}."
+
+	| names loadedNames held |
+	names := iceRepository workingCopy packageNames.
+	loadedNames := aRepository workingCopy packages select: [ :package | package isLoaded ] thenCollect: [ :package | package name ].
+	held := loadedNames count: [ :name | names includes: name ].
+	^ {
+		  (held / (loadedNames size max: 1)).
+		  held }
 ]
 
 { #category : 'initialization' }

@@ -38,21 +38,6 @@ FRFavoriteLoaderTest >> setUp [
 	fileSystem := FileSystem memory
 ]
 
-{ #category : 'tests' }
-FRFavoriteLoaderTest >> testBaselineOfPharoIsNotLoaded [
-	"The baseline of Pharo does not load like the others; the user is told instead of being asked which baseline to load."
-
-	| told loader |
-	told := OrderedCollection new.
-	loader := self loader.
-	loader
-		informer: [ :text | told add: text ];
-		baselineChooser: [ :names | self fail: 'should not ask' ].
-	(self cloneNamed: 'pharo' packages: #( 'BaselineOfIDE' 'BaselineOfPharo' )) loadBaselineFor: loader.
-	self assert: told size equals: 1.
-	self assert: (told first includesSubstring: 'not loaded')
-]
-
 { #category : 'tests - errors' }
 FRFavoriteLoaderTest >> testChooserCancelRaisesError [
 

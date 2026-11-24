@@ -1,5 +1,5 @@
 "
-I test that `FRCloneAttacher` finds the repository of the image a clone belongs to, and that attaching a fork brings the commit of the image from its parent. GitHub is never contacted: the parent is a repository on disk.
+I test that attaching a fork with `FRCloneAttacher` brings the commit of the image from its parent. GitHub is never contacted: the parent is a repository on disk.
 "
 Class {
 	#name : 'FRCloneAttacherTest',
@@ -106,94 +106,6 @@ FRCloneAttacherTest >> testAttachTellsWhyTheParentCouldNotBeFetched [
 		attach: fork to: pharo.
 	self assert: (told anySatisfy: [ :each |
 			 (each includesSubstring: 'could not be fetched') and: [ each includesSubstring: 'favrepo-no-such-repository' ] ])
-]
-
-{ #category : 'tests - matching' }
-FRCloneAttacherTest >> testCloneAttachesToNothingWhenItHoldsNoLoadedPackage [
-	"Sharing only packages that are not in the image does not count."
-
-	| clone unloaded |
-	clone := self repositoryNamed: 'new-project' packages: #( 'NotLoaded-FRFixture' 'Favrepo' ).
-	unloaded := self repositoryNamed: 'Unloaded' packages: #( 'NotLoaded-FRFixture' ).
-	self assert: (self attacher repositoryLoadedFrom: clone among: { unloaded }) isNil
-]
-
-{ #category : 'tests - matching' }
-FRCloneAttacherTest >> testCloneAttachesToNothingWhenItLacksTheCommitOfARepositoryWithoutPackages [
-	"A repository listing no package is taken over only by a clone that has its commit."
-
-	| clone pharo |
-	clone := self gitRepositoryWithBranch: 'dev'.
-	pharo := self repositoryNamed: 'pharo' atCommit: '0123456789abcdef0123456789abcdef01234567'.
-	self assert: (self attacher repositoryLoadedFrom: clone among: { pharo }) isNil
-]
-
-{ #category : 'tests - matching' }
-FRCloneAttacherTest >> testCloneAttachesToTheRepositoryItCoversBest [
-	"The image's pharo repository lists the Spec2 packages too; a Spec fork must take over Spec2, whose loaded packages it holds all, not pharo."
-
-	| clone spec pharo |
-	clone := self repositoryNamed: 'spec' packages: #( 'Favrepo' 'Favrepo-Spec' ).
-	spec := self repositoryNamed: 'Spec2' packages: #( 'Favrepo' 'Favrepo-Spec' ).
-	pharo := self repositoryNamed: 'pharo' packages: #( 'Favrepo' 'Favrepo-Spec' 'Favrepo-Tests' 'Kernel' ).
-	self
-		assert: (self attacher repositoryLoadedFrom: clone among: {
-				 pharo.
-				 spec })
-		identicalTo: spec
-]
-
-{ #category : 'tests - matching' }
-FRCloneAttacherTest >> testCloneAttachesToTheRepositoryWhoseLoadedPackagesItHolds [
-	"The fork of a project that came with the image takes over its loaded packages."
-
-	| clone loaded other |
-	clone := self repositoryNamed: 'favrepo-fork' packages: #( 'Favrepo' 'Favrepo-Spec' ).
-	loaded := self repositoryNamed: 'Favrepo' packages: #( 'Favrepo' 'Favrepo-Spec' ).
-	other := self repositoryNamed: 'Other' packages: #( 'Favrepo-Tests' ).
-	self
-		assert: (self attacher repositoryLoadedFrom: clone among: {
-				 other.
-				 loaded })
-		identicalTo: loaded
-]
-
-{ #category : 'tests - matching' }
-FRCloneAttacherTest >> testCloneAttachesToTheRepositoryWithoutPackagesWhoseCommitItHas [
-
-	| clone pharo other |
-	clone := self gitRepositoryWithBranch: 'dev'.
-	other := self repositoryNamed: 'other' atCommit: '0123456789abcdef0123456789abcdef01234567'.
-	pharo := self repositoryNamed: 'pharo' atCommit: clone headCommit id.
-	self
-		assert: (self attacher repositoryLoadedFrom: clone among: {
-				 other.
-				 pharo })
-		identicalTo: pharo
-]
-
-{ #category : 'tests - matching' }
-FRCloneAttacherTest >> testCloneWithoutBaselineOfPharoDoesNotAttachToTheRepositoryOfTheImage [
-
-	| clone pharo |
-	clone := self gitRepositoryWithBranch: 'dev'.
-	pharo := self repositoryNamed: 'pharo' atCommit: SystemVersion current commitHash.
-	self assert: (self attacher repositoryLoadedFrom: clone among: { pharo }) isNil
-]
-
-{ #category : 'tests - matching' }
-FRCloneAttacherTest >> testPharoForkBehindTheImageAttachesToTheRepositoryOfTheImage [
-	"A fork that does not have the commit the image was built from is still a clone of Pharo: it must not be registered apart."
-
-	| clone pharo other |
-	clone := self repositoryNamed: 'Pharo' packages: #( 'BaselineOfPharo' ).
-	other := self repositoryNamed: 'other' atCommit: '0123456789abcdef0123456789abcdef01234567'.
-	pharo := self repositoryNamed: 'pharo' atCommit: SystemVersion current commitHash.
-	self
-		assert: (self attacher repositoryLoadedFrom: clone among: {
-				 other.
-				 pharo })
-		identicalTo: pharo
 ]
 
 { #category : 'tests - attaching' }
