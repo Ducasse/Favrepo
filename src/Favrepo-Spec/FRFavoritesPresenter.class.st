@@ -76,7 +76,7 @@ Keep the Git repositories you work on at hand, and clone and load them with Iceb
 
 - The name and the `owner/project` of the favorite. A check mark tells that its code is loaded; a grey row that nothing is loaded.
 - **Clone** (the down arrow) clones the repository with Iceberg without loading it. A clone left on disk by Iceberg''s Forget is registered again.
-- **Clone of code the image already has**: projects that came with the image, such as NewTools or Spec2, are loaded but have no clone. Clone is offered for them: your clone (for example your fork) is attached to the loaded code instead of being registered apart. The clone is put, without loading anything, on a branch `image-<commit>` at the commit the image was built from, so the image and the clone are in sync. The project it was forked from is added as the `upstream` remote and fetched. Commits go to your fork (`origin`).
+- **Clone of code the image already has**: projects that came with the image, such as NewTools, Spec2 or Pharo itself, are loaded but have no clone. Clone is offered for them: your clone (for example your fork, even when it is behind) is attached to the loaded code instead of being registered apart. The clone is put, without loading anything, on a branch `image-<commit>` at the commit the image was built from, so the image and the clone are in sync. The project it was forked from is added as a remote named after its owner, as Iceberg does, and fetched. Commits go to your fork (`origin`).
 - **The branch list** chooses the branch or tag to load.
 - **Load** clones if needed, switches to the branch, and loads the baseline (its default group) with Metacello, keeping the projects already loaded.
 - **Double-click** opens the Iceberg browser of the repository.

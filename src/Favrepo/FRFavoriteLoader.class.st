@@ -1,34 +1,30 @@
 "
-I load a favorite into the image in one go: clone, find the baseline, load it with Metacello.
+I load a favorite into the image in one go: clone it, find its baseline, load it with `Metacello`. I also put its clone in order: switch it to the branch of the favorite, attach it to code that came with the image, or define its bottom branch. Key messages are `clone:`, `load:` and `defineBottomBranchFor:`.
 
-## Responsibility:
-
-- I clone the favorite with Iceberg and switch it to its branch or tag (keeping it on its branch, and telling the user, when that branch or tag does not exist), register a clone left on disk (after Iceberg's Forget), or reuse its registered clone and switch it to that branch (asking first when the clone has uncommitted changes).
-- When the clone holds code the image already has from a repository without clone (one that came with the image, such as Spec2 for a fork of Spec), I attach the clone to that repository instead of registering it apart, and check out a branch `image-<commit>` at the commit the image was loaded from, without loading anything: the image and the clone are in sync, and commits go to the clone's remote (your fork). I add the project it was forked from as the `upstream` remote (found by `FRUpstreamFinder`) and fetch it first, so the image commit is found even when the fork is behind, then tell the user what I did through the informer block.
-- I find the source folder from the `.project` file and the `BaselineOf` packages in it; I ask which one to load when there are several.
-- I load the `default` group with `Metacello`, keeping the projects already loaded (`onConflictUseLoaded`).
-
-## Collaborators:
-
-- `FRCatalog` tells me whether the favorite is already cloned.
-- `IceRepositoryCreator` clones; `IceRepository` switches branches.
-- `Metacello` loads the baseline from the clone through a `gitlocal://` repository.
-- The baseline chooser and switch confirmer blocks, set by `FRApplication`, ask the user.
-
-## Public API and Key Messages
-
-- `clone: aFavorite` only clones (or registers a clone left on disk) and answers the Iceberg repository.
-- `repositoryLoadedFrom: aClone among: someRepositories` answers the repository whose loaded packages the clone holds best; `attach:to:` and `syncCloneWithImageOf:` do the attaching.
-- `defineBottomBranchFor: aFavorite` creates and checks out today's bottom branch (`2026-11-15-Bottom`) at the current commit of the clone, without loading; `bottomBranchNameOn: aDate` names it.
-- `load: aFavorite` answers the Iceberg repository; raises `FRError` when there is no baseline or the user cancels.
-- `catalog:`, `baselineChooser:`, `switchConfirmer:`, `informer:` (what `report:` tells: a clone attached to the image code, a missing branch), `upstreamFinder:`, `clonesLocation:` (Iceberg's clone folder by default) configure me.
-- `baselineNamesIn:`, `sourceDirectoryOf:`, `metacelloRepositoryFor:`, `commitishFor:`, `cloneDirectoryFor:`, `existingCloneFor:`, `hasCommitishNamed:in:` are the steps, testable without network.
+## Examples
 
 ```
-FRFavoriteLoader new load: (FRFavorite url: 'git@github.com:noha/mustache.git')
+FRFavoriteLoader exampleOnSmallImage
 ```
 
-See `FRFavoriteLoader class >> #exampleOnSmallImage`.
+## Design Rationale
+
+- When a clone holds code that the image has from a repository without clone (one that came with the image, such as Spec2 for a fork of Spec, or Pharo itself), I attach the clone to that repository instead of registering it apart: two repositories for the same code confuse Iceberg and the user.
+- A clone of Pharo is recognized by its content (`BaselineOfPharo`), never by its commits: forks lag behind the image.
+- Once attached, I add the parent of the fork as a remote and fetch it, as Iceberg does when it clones a fork, then check out a branch `image-<commit>` at the commit the image was built from. Nothing is loaded: the image and the clone are in sync, and commits go to the fork (origin).
+- When that commit is still unknown I adopt no other one: it would turn all the commits in between into changes of the user. The repository stays in the Fetch required state of Iceberg, and I refuse to switch it or define a bottom branch.
+- A missing branch never fails a load: I fall back on master, main or dev, and tell the user.
+
+## Usage
+
+1. `FRApplication>>newLoader` creates or configures me with a catalog, and with blocks that ask the user (`baselineChooser:`, `switchConfirmer:`) or tell them what I did (`informer:`).
+2. `FRFavoritesPresenter` sends me `clone:`, `load:` or `defineBottomBranchFor:` for a row.
+3. `FRCatalog` tells me whether the favorite is already cloned; `FRUpstreamFinder` finds the parent of a fork.
+
+## Implementation Notes
+
+- I switch branches with Iceberg without loading code. `load:` then loads the default group of the baseline from the clone, keeping the projects already loaded (`onConflictUseLoaded`). The baseline of Pharo is never loaded: Pharo is the running system and its baseline does not load like the others.
+- `isImageCommitUnknownIn:` must be checked before anything that adopts a commit: a switch or a checkout does.
 "
 Class {
 	#name : 'FRFavoriteLoader',
@@ -57,19 +53,21 @@ FRFavoriteLoader class >> exampleOnSmallImage [
 
 { #category : 'attaching' }
 FRFavoriteLoader >> addUpstreamTo: aRepository [
-	"Add the project aRepository was forked from as its upstream remote and fetch it, so that the commit of the image is found even when the fork is behind. Answer the upstream URL, or nil when there is none or it cannot be fetched."
+	"Add the project aRepository was forked from as a remote named after its owner, as Iceberg does, and fetch it, so that the commit of the image is found even when the fork is behind. Answer its URL, or nil when there is none or it cannot be fetched (the user is told why)."
 
-	| url remote |
-	url := self upstreamFinder upstreamUrlFor: aRepository origin url.
-	url ifNil: [ ^ nil ].
-	remote := aRepository remoteNamed: 'upstream' ifAbsent: [
-			          aRepository addRemote: (IceGitRemote name: 'upstream' url: url).
-			          aRepository remoteNamed: 'upstream' ].
+	| upstream remote |
+	upstream := self upstreamFinder upstreamRemoteFor: aRepository origin url.
+	upstream ifNil: [ ^ nil ].
+	remote := self ensureRemote: upstream in: aRepository.
 	^ [
 		  aRepository fetchFrom: remote.
 		  remote url ]
 		  on: Error
-		  do: [ nil ]
+		  do: [ :error |
+			  self report: ('{1} could not be fetched: {2}' format: {
+						   remote url.
+						   error messageText }).
+			  nil ]
 ]
 
 { #category : 'attaching' }
@@ -100,7 +98,7 @@ FRFavoriteLoader >> attachReportFor: aRepository branch: aBranchNameOrNil upstre
 			  aBranchNameOrNil
 				  ifNil: [
 						  stream nextPutAll:
-							  'The commit the image was built from was not found: the clone stays on its branch and the differences with the image show as changes in Iceberg.' ]
+							  'The commit the image was built from was not found: nothing was checked out. Fetch it in Iceberg (Repair repository), then create a branch at the image commit.' ]
 				  ifNotNil: [
 						  stream nextPutAll:
 							  ('Branch {1} is checked out at the commit the image was built from: the image and the clone are in sync.' format:
@@ -110,8 +108,8 @@ FRFavoriteLoader >> attachReportFor: aRepository branch: aBranchNameOrNil upstre
 				  cr.
 			  anUpstreamUrlOrNil
 				  ifNil: [
-				  stream nextPutAll: 'No upstream remote was added: the project it was forked from is unknown or could not be fetched.' ]
-				  ifNotNil: [ stream nextPutAll: ('Remote upstream: {1}' format: { anUpstreamUrlOrNil }) ] ]
+				  stream nextPutAll: 'No upstream was fetched: the project it was forked from is unknown or could not be fetched.' ]
+				  ifNotNil: [ stream nextPutAll: ('Upstream fetched: {1}' format: { anUpstreamUrlOrNil }) ] ]
 ]
 
 { #category : 'accessing' }
@@ -227,6 +225,7 @@ FRFavoriteLoader >> defineBottomBranchFor: aFavorite [
 	info := self catalog infoFor: aFavorite.
 	(info isNil or: [ info isCloned not ]) ifTrue: [ FRError signal: ('{1} has no clone: clone it first' format: { aFavorite name }) ].
 	repository := info iceRepository.
+	(self isImageCommitUnknownIn: repository) ifTrue: [ FRError signal: (self unknownImageCommitReportFor: repository) ].
 	name := self bottomBranchNameOn: Date today.
 	(repository hasLocalBranchNamed: name) ifTrue: [
 			FRError signal: ('{1} already has a branch {2}' format: {
@@ -235,6 +234,15 @@ FRFavoriteLoader >> defineBottomBranchFor: aFavorite [
 	repository createBranch: name.
 	Iceberg announcer announce: (IceRepositoryModified for: repository).
 	^ name
+]
+
+{ #category : 'attaching' }
+FRFavoriteLoader >> ensureRemote: aRemote in: aRepository [
+	"The remote of aRepository at the location of aRemote, whatever its name; aRemote is added when there is none."
+
+	^ aRepository remotes detect: [ :each | each referencesSameRemoteLocationAs: aRemote ] ifNone: [
+		  aRepository addRemote: aRemote.
+		  aRepository remoteNamed: aRemote name ]
 ]
 
 { #category : 'steps' }
@@ -295,21 +303,45 @@ FRFavoriteLoader >> initialize [
 	informer := [ :text |  ]
 ]
 
+{ #category : 'attaching' }
+FRFavoriteLoader >> isImageCommitUnknownIn: aRepository [
+	"Whether the clone of aRepository does not have the commit the image code comes from (Iceberg's Fetch required)."
+
+	^ aRepository workingCopy workingCopyState isUnknownCommitState
+]
+
+{ #category : 'baselines' }
+FRFavoriteLoader >> isPharoClone: aCloneDirectory [
+	"Whether aCloneDirectory is a clone of Pharo. It is read on disk: a repository whose image commit is unknown lists no package."
+
+	^ (self baselineNamesIn: aCloneDirectory) includes: 'Pharo'
+]
+
 { #category : 'loading' }
 FRFavoriteLoader >> load: aFavorite [
 	"Clone aFavorite (or reuse its clone on the right branch), then load its baseline with Metacello."
 
-	| repository clone baseline |
+	| repository |
 	repository := self repositoryFor: aFavorite.
-	clone := repository location.
+	self loadBaselineOf: repository.
+	^ repository
+]
+
+{ #category : 'loading' }
+FRFavoriteLoader >> loadBaselineOf: aRepository [
+	"Load the baseline of the clone of aRepository with Metacello, except the one of Pharo: it is the running system and its baseline does not load like the others."
+
+	| clone baseline |
+	clone := aRepository location.
+	(self isPharoClone: clone) ifTrue: [
+		^ self report: ('The baseline of {1} was not loaded: Pharo is the running system.' format: { aRepository name }) ].
 	baseline := self baselineToLoadIn: clone.
 	Metacello new
 		baseline: baseline;
 		repository: (self metacelloRepositoryFor: clone);
 		onConflictUseLoaded;
 		onWarningLog;
-		load.
-	^ repository
+		load
 ]
 
 { #category : 'baselines' }
@@ -373,6 +405,23 @@ FRFavoriteLoader >> repositoriesToAttach [
 	^ IceRepository registry select: [ :each | each isMissing ]
 ]
 
+{ #category : 'attaching' }
+FRFavoriteLoader >> repositoryBestHeldBy: aClone among: someRepositories [
+	"The repository among someRepositories whose loaded packages aClone holds best (the most covered, then the most packages), or nil when aClone holds none of their loaded packages."
+
+	| cloneNames best bestScore |
+	cloneNames := aClone workingCopy packageNames asSet.
+	best := nil.
+	bestScore := { 0. 0 }.
+	someRepositories do: [ :each |
+		| score |
+		score := self scoreOf: each heldBy: cloneNames.
+		(score second > 0 and: [ self score: score isBetterThan: bestScore ]) ifTrue: [
+			best := each.
+			bestScore := score ] ].
+	^ best
+]
+
 { #category : 'steps' }
 FRFavoriteLoader >> repositoryFor: aFavorite [
 	"The Iceberg repository of aFavorite: cloned when it is not in the image yet, registered when only its clone was left on disk."
@@ -387,24 +436,21 @@ FRFavoriteLoader >> repositoryFor: aFavorite [
 
 { #category : 'attaching' }
 FRFavoriteLoader >> repositoryLoadedFrom: aClone among: someRepositories [
-	"The repository among someRepositories whose loaded packages aClone holds best (the most covered, then the most packages); failing that, one that lists no package (like the image's pharo repository) whose code comes from a commit aClone has; nil otherwise."
+	"The repository among someRepositories that aClone is a clone of: the one of the image itself for a clone of Pharo; otherwise the one whose loaded packages aClone holds best; failing that, one that lists no package whose code comes from a commit aClone has; nil otherwise."
 
-	| cloneNames best bestScore |
-	cloneNames := aClone workingCopy packageNames asSet.
-	best := nil.
-	bestScore := { 0. 0 }.
-	someRepositories do: [ :each |
-		| loadedNames held score |
-		loadedNames := each workingCopy packages select: [ :package | package isLoaded ] thenCollect: [ :package | package name ].
-		held := loadedNames count: [ :name | cloneNames includes: name ].
-		score := {
-			         (held / (loadedNames size max: 1)).
-			         held }.
-		(held > 0 and: [ self score: score isBetterThan: bestScore ]) ifTrue: [
-			best := each.
-			bestScore := score ] ].
-	^ best ifNil: [
-		  someRepositories detect: [ :each | self clone: aClone hasTheCommitOfPackagelessRepository: each ] ifNone: [ nil ] ]
+	^ (self repositoryOfTheImageAmong: someRepositories for: aClone) ifNil: [
+		  (self repositoryBestHeldBy: aClone among: someRepositories) ifNil: [
+			  someRepositories detect: [ :each | self clone: aClone hasTheCommitOfPackagelessRepository: each ] ifNone: [ nil ] ] ]
+]
+
+{ #category : 'attaching' }
+FRFavoriteLoader >> repositoryOfTheImageAmong: someRepositories for: aClone [
+	"The repository of the Pharo image itself (its code comes from the commit the image was built from) when aClone is a clone of Pharo, nil otherwise. The fork may be behind: whether aClone has that commit does not matter."
+
+	(aClone workingCopy packageNames includes: 'BaselineOfPharo') ifFalse: [ ^ nil ].
+	^ someRepositories
+		  detect: [ :each | each workingCopy referenceCommit id = SystemVersion current commitHash ]
+		  ifNone: [ nil ]
 ]
 
 { #category : 'attaching' }
@@ -413,6 +459,18 @@ FRFavoriteLoader >> score: aScore isBetterThan: anotherScore [
 
 	aScore first = anotherScore first ifFalse: [ ^ aScore first > anotherScore first ].
 	^ aScore second > anotherScore second
+]
+
+{ #category : 'attaching' }
+FRFavoriteLoader >> scoreOf: aRepository heldBy: someNames [
+	"How well someNames cover the loaded packages of aRepository: {coverage. count}."
+
+	| loadedNames held |
+	loadedNames := aRepository workingCopy packages select: [ :package | package isLoaded ] thenCollect: [ :package | package name ].
+	held := loadedNames count: [ :name | someNames includes: name ].
+	^ {
+		  (held / (loadedNames size max: 1)).
+		  held }
 ]
 
 { #category : 'baselines' }
@@ -430,11 +488,14 @@ FRFavoriteLoader >> sourceDirectoryOf: aCloneDirectory [
 
 { #category : 'loading' }
 FRFavoriteLoader >> switch: anIceRepository to: aFavorite [
-	"Put an existing clone on the favorite's branch; ask before switching a clone with uncommitted changes and, when the user declines, keep the clone where it is and tell the user. When the branch or tag does not exist, fall back on the first of #fallbackCommitishes that exists and tell the user; when none exists, keep the clone on its branch."
+	"Put an existing clone on the favorite's branch; ask before switching a clone with uncommitted changes and, when the user declines, keep the clone where it is and tell the user. A clone that does not have the commit of the image code stays where it is too. When the branch or tag does not exist, fall back on the first of #fallbackCommitishes that exists and tell the user; when none exists, keep the clone on its branch."
 
 	| commitish |
 	commitish := self commitishFor: aFavorite.
 	commitish ifNil: [ ^ anIceRepository ].
+	(self isImageCommitUnknownIn: anIceRepository) ifTrue: [
+			self report: (self unknownImageCommitReportFor: anIceRepository).
+			^ anIceRepository ].
 	(self hasCommitishNamed: commitish in: anIceRepository) ifFalse: [
 			commitish := self fallbackCommitishIn: anIceRepository.
 			self report: (self missingBranchReportFor: aFavorite in: anIceRepository fallback: commitish).
@@ -459,19 +520,25 @@ FRFavoriteLoader >> switchConfirmer: aBlock [
 
 { #category : 'attaching' }
 FRFavoriteLoader >> syncCloneWithImageOf: aRepository [
-	"Without loading anything, check out a branch at the commit the image code comes from, so that the image and the clone have no difference, and answer its name. When the clone does not know that commit, keep its branch and answer nil: the image differences show as changes."
+	"Without loading anything, check out a branch at the commit the image code comes from, so that the image and the clone have no difference, and answer its name. When the clone does not know that commit, change nothing and answer nil: Iceberg asks to fetch it. Adopting the commit of the clone instead would turn all the commits in between into changes of the user."
 
 	| commit branchName |
 	commit := aRepository lookupCommit: aRepository workingCopy referenceCommit id.
-	commit isUnknownCommit ifTrue: [
-			aRepository branch switch.
-			^ nil ].
+	commit isUnknownCommit ifTrue: [ ^ nil ].
 	branchName := self imageBranchNameFor: commit.
 	(aRepository hasLocalBranchNamed: branchName)
 		ifTrue: [ (aRepository branchNamed: branchName) switch ]
 		ifFalse: [ aRepository createBranch: branchName inCommit: commit ].
 	commit adopt.
 	^ branchName
+]
+
+{ #category : 'attaching' }
+FRFavoriteLoader >> unknownImageCommitReportFor: aRepository [
+
+	^ 'The clone of {1} does not have the commit the image was built from ({2}): Fetch it in Iceberg first (Repair repository).' format: {
+		  aRepository name.
+		  aRepository workingCopy referenceCommit shortId }
 ]
 
 { #category : 'accessing' }

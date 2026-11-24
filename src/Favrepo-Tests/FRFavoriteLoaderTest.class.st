@@ -6,7 +6,8 @@ Class {
 	#superclass : 'TestCase',
 	#instVars : [
 		'fileSystem',
-		'gitRepository'
+		'gitRepository',
+		'upstreamRepository'
 	],
 	#category : 'Favrepo-Tests',
 	#package : 'Favrepo-Tests'
@@ -38,6 +39,15 @@ FRFavoriteLoaderTest >> clonesLoader [
 ]
 
 { #category : 'helpers' }
+FRFavoriteLoaderTest >> forkRepository [
+	"A git repository whose origin is a GitHub fork (never contacted)."
+
+	^ (self gitRepositoryWithBranch: 'dev')
+		  addRemote: (IceGitRemote name: 'origin' url: 'git@github.com:Ducasse/Pharo.git');
+		  yourself
+]
+
+{ #category : 'helpers' }
 FRFavoriteLoaderTest >> gitRepositoryWithBranch: aBranchName [
 	"A git repository on disk, not registered in Iceberg, with one commit on master and a branch aBranchName at that commit; it is checked out on master and deleted by tearDown."
 
@@ -58,9 +68,45 @@ FRFavoriteLoaderTest >> loader [
 ]
 
 { #category : 'helpers' }
+FRFavoriteLoaderTest >> loaderWithParentAt: aUrl [
+	"A loader that GitHub (not asked) tells that the fork comes from aUrl, owned by pharo-project."
+
+	^ self loader
+		  upstreamFinder: (FRUpstreamFinder gitHubRepositories: [ :owner :project |
+				   Dictionary new
+					   at: 'fork' put: true;
+					   at: 'parent' put: (Dictionary new
+							    at: 'owner' put: (Dictionary with: 'login' -> 'pharo-project');
+							    at: 'ssh_url' put: aUrl;
+							    at: 'clone_url' put: aUrl;
+							    yourself);
+					   yourself ]);
+		  yourself
+]
+
+{ #category : 'helpers' }
+FRFavoriteLoaderTest >> loaderWithParentAtUpstream [
+
+	^ self loaderWithParentAt: self upstreamRepository location fullName
+]
+
+{ #category : 'helpers' }
 FRFavoriteLoaderTest >> mustache [
 
 	^ FRFavorite url: 'git@github.com:noha/mustache.git' name: 'Mustache' branch: 'v1.3'
+]
+
+{ #category : 'helpers' }
+FRFavoriteLoaderTest >> newGitRepositoryNamed: aName [
+	"A git repository on disk, not registered in Iceberg, with one commit of its own on master."
+
+	| repository |
+	repository := IceRepositoryCreator new
+		              location: (FileLocator temp / ('favrepo-test-' , UUID new asString36)) asFileReference;
+		              subdirectory: 'src';
+		              createNewRepositoryNamed: aName.
+	repository commitWithMessage: 'Initial commit of ' , aName.
+	^ repository
 ]
 
 { #category : 'helpers' }
@@ -89,6 +135,17 @@ FRFavoriteLoaderTest >> repositoryNamed: aName packages: someNames [
 	^ repository
 ]
 
+{ #category : 'helpers' }
+FRFavoriteLoaderTest >> repositoryOnDiskAtUnknownCommit: anId [
+	"A repository on the clone of gitRepository, on master, whose image code comes from anId, a commit the clone does not have: what attaching a fork that is behind gives."
+
+	| clone |
+	clone := self gitRepositoryWithBranch: 'dev'.
+	^ (self repositoryNamed: 'pharo' atCommit: anId)
+		  location: clone location;
+		  yourself
+]
+
 { #category : 'running' }
 FRFavoriteLoaderTest >> setUp [
 
@@ -99,12 +156,53 @@ FRFavoriteLoaderTest >> setUp [
 { #category : 'running' }
 FRFavoriteLoaderTest >> tearDown [
 
-	gitRepository ifNotNil: [
-			| location |
-			location := gitRepository location.
-			gitRepository free.
-			location ensureDeleteAll ].
+	{
+		gitRepository.
+		upstreamRepository } do: [ :each |
+		each ifNotNil: [
+				| location |
+				location := each location.
+				each free.
+				location ensureDeleteAll ] ].
 	super tearDown
+]
+
+{ #category : 'tests - attaching' }
+FRFavoriteLoaderTest >> testAttachFetchesTheImageCommitFromTheParentOfTheFork [
+	"The fork is behind: the commit of the image is only in the project it was forked from."
+
+	| fork commit pharo |
+	fork := self forkRepository.
+	commit := self upstreamRepository headCommit.
+	pharo := self repositoryNamed: 'pharo' atCommit: commit id.
+	self assert: (fork lookupCommit: commit id) isUnknownCommit.
+	self loaderWithParentAtUpstream attach: fork to: pharo.
+	self assert: pharo head name equals: 'image-' , commit shortId.
+	self assert: pharo workingCopy referenceCommit id equals: commit id.
+	self deny: pharo workingCopy referenceCommit isUnknownCommit
+]
+
+{ #category : 'tests - attaching' }
+FRFavoriteLoaderTest >> testAttachKeepsTheImageCommitWhenItIsNowhere [
+	"Adopting the commit of the clone would turn everything between the two commits into changes of the user."
+
+	| fork pharo missing |
+	fork := self forkRepository.
+	missing := '0123456789abcdef0123456789abcdef01234567'.
+	pharo := self repositoryNamed: 'pharo' atCommit: missing.
+	self loaderWithParentAtUpstream attach: fork to: pharo.
+	self assert: pharo workingCopy referenceCommit id equals: missing.
+	self assert: pharo workingCopy referenceCommit isUnknownCommit
+]
+
+{ #category : 'tests - attaching' }
+FRFavoriteLoaderTest >> testAttachNamesTheParentRemoteAfterItsOwnerLikeIceberg [
+
+	| fork pharo |
+	fork := self forkRepository.
+	pharo := self repositoryNamed: 'pharo' atCommit: self upstreamRepository headCommit id.
+	self loaderWithParentAtUpstream attach: fork to: pharo.
+	self assert: (pharo remotes collect: [ :each | each name ] as: Set) equals: #( 'origin' 'pharo-project' ) asSet
 ]
 
 { #category : 'tests - attaching' }
@@ -129,6 +227,20 @@ FRFavoriteLoaderTest >> testAttachReportWithoutImageCommitSaysTheImageChangesSho
 	self assert: (report includesSubstring: 'No upstream')
 ]
 
+{ #category : 'tests - attaching' }
+FRFavoriteLoaderTest >> testAttachTellsWhyTheParentCouldNotBeFetched [
+
+	| fork pharo told |
+	fork := self forkRepository.
+	pharo := self repositoryNamed: 'pharo' atCommit: '0123456789abcdef0123456789abcdef01234567'.
+	told := OrderedCollection new.
+	(self loaderWithParentAt: (FileLocator temp / 'favrepo-no-such-repository') fullName)
+		informer: [ :text | told add: text ];
+		attach: fork to: pharo.
+	self assert: (told anySatisfy: [ :each |
+			 (each includesSubstring: 'could not be fetched') and: [ each includesSubstring: 'favrepo-no-such-repository' ] ])
+]
+
 { #category : 'tests' }
 FRFavoriteLoaderTest >> testBaselineNamesFindsFileTreePackages [
 
@@ -143,6 +255,23 @@ FRFavoriteLoaderTest >> testBaselineNamesFindsTonelPackages [
 	| clone |
 	clone := self cloneWithSource: 'src' baselines: #( 'BaselineOfMyProject' ).
 	self assert: (self loader baselineNamesIn: clone) equals: #( 'MyProject' )
+]
+
+{ #category : 'tests' }
+FRFavoriteLoaderTest >> testBaselineOfPharoIsNotLoaded [
+	"The baseline of Pharo does not load like the others; the user is told instead of being asked which baseline to load."
+
+	| repository told |
+	repository := (self repositoryNamed: 'pharo' packages: #(  ))
+		              location: (self cloneWithSource: 'src' baselines: #( 'BaselineOfIDE' 'BaselineOfPharo' ));
+		              yourself.
+	told := OrderedCollection new.
+	self loader
+		informer: [ :text | told add: text ];
+		baselineChooser: [ :names | self fail: 'should not ask' ];
+		loadBaselineOf: repository.
+	self assert: told size equals: 1.
+	self assert: (told first includesSubstring: 'not loaded')
 ]
 
 { #category : 'tests - bottom branch' }
@@ -235,9 +364,48 @@ FRFavoriteLoaderTest >> testCloneDirectoryIsOwnerAndProjectInTheClonesLocation [
 ]
 
 { #category : 'tests' }
+FRFavoriteLoaderTest >> testCloneWithAnotherBaselineIsNoPharoClone [
+
+	self deny: (self loader isPharoClone: (self cloneWithSource: 'src' baselines: #( 'BaselineOfPharoExtras' )))
+]
+
+{ #category : 'tests' }
+FRFavoriteLoaderTest >> testCloneWithBaselineOfPharoIsAPharoClone [
+
+	self assert: (self loader isPharoClone: (self cloneWithSource: 'src' baselines: #( 'BaselineOfIDE' 'BaselineOfPharo' )))
+]
+
+{ #category : 'tests - attaching' }
+FRFavoriteLoaderTest >> testCloneWithoutBaselineOfPharoDoesNotAttachToTheRepositoryOfTheImage [
+
+	| clone pharo |
+	clone := self gitRepositoryWithBranch: 'dev'.
+	pharo := self repositoryNamed: 'pharo' atCommit: SystemVersion current commitHash.
+	self assert: (self loader repositoryLoadedFrom: clone among: { pharo }) isNil
+]
+
+{ #category : 'tests' }
 FRFavoriteLoaderTest >> testDefaultBranchMeansNoCommitish [
 
 	self assert: (self loader commitishFor: (FRFavorite url: 'git@github.com:noha/mustache.git')) isNil
+]
+
+{ #category : 'tests - errors' }
+FRFavoriteLoaderTest >> testDefineBottomBranchAtUnknownImageCommitRaisesError [
+	"The bottom branch would be at the commit of a fork that is behind the image."
+
+	| repository info |
+	repository := self repositoryOnDiskAtUnknownCommit: '0123456789abcdef0123456789abcdef01234567'.
+	info := (FRRepositoryInfo name: 'Mustache' url: nil)
+		        beCloned;
+		        iceRepository: repository;
+		        yourself.
+	self
+		should: [
+				self loader
+					catalog: (FRCatalog withAll: { info });
+					defineBottomBranchFor: self mustache ]
+		raise: FRError
 ]
 
 { #category : 'tests - errors' }
@@ -316,6 +484,21 @@ FRFavoriteLoaderTest >> testNoBaselineRaisesError [
 	self should: [ self loader baselineToLoadIn: clone ] raise: FRError
 ]
 
+{ #category : 'tests - attaching' }
+FRFavoriteLoaderTest >> testPharoForkBehindTheImageAttachesToTheRepositoryOfTheImage [
+	"A fork that does not have the commit the image was built from is still a clone of Pharo: it must not be registered apart."
+
+	| clone pharo other |
+	clone := self repositoryNamed: 'Pharo' packages: #( 'BaselineOfPharo' ).
+	other := self repositoryNamed: 'other' atCommit: '0123456789abcdef0123456789abcdef01234567'.
+	pharo := self repositoryNamed: 'pharo' atCommit: SystemVersion current commitHash.
+	self
+		assert: (self loader repositoryLoadedFrom: clone among: {
+				 other.
+				 pharo })
+		identicalTo: pharo
+]
+
 { #category : 'tests' }
 FRFavoriteLoaderTest >> testSeveralBaselinesAskTheChooser [
 
@@ -358,6 +541,22 @@ FRFavoriteLoaderTest >> testSourceDirectoryIsTheCloneWithoutProjectFile [
 ]
 
 { #category : 'tests - switching' }
+FRFavoriteLoaderTest >> testSwitchKeepsTheImageCommitTheCloneDoesNotKnow [
+	"Switching would adopt a commit unrelated to the image code."
+
+	| repository missing told |
+	missing := '0123456789abcdef0123456789abcdef01234567'.
+	repository := self repositoryOnDiskAtUnknownCommit: missing.
+	told := OrderedCollection new.
+	self loader
+		informer: [ :text | told add: text ];
+		switch: repository to: (self mustache withBranch: 'dev').
+	self assert: repository workingCopy referenceCommit id equals: missing.
+	self assert: repository head name equals: 'master'.
+	self assert: (told anySatisfy: [ :each | each includesSubstring: 'Fetch' ])
+]
+
+{ #category : 'tests - switching' }
 FRFavoriteLoaderTest >> testSwitchToExistingBranchChecksItOut [
 
 	| repository |
@@ -389,4 +588,11 @@ FRFavoriteLoaderTest >> testSwitchToMissingBranchTellsTheUser [
 	self assert: told size equals: 1.
 	self assert: (told first includesSubstring: 'missing').
 	self assert: (told first includesSubstring: 'master')
+]
+
+{ #category : 'helpers' }
+FRFavoriteLoaderTest >> upstreamRepository [
+	"The project a fork comes from, holding a commit the fork does not have; deleted by tearDown."
+
+	^ upstreamRepository ifNil: [ upstreamRepository := self newGitRepositoryNamed: 'FRUpstreamFixture' ]
 ]
