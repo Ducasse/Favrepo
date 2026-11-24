@@ -59,6 +59,36 @@ FRFavoritesPresenterTest >> setUp [
 	presenter := application instantiate: FRFavoritesPresenter
 ]
 
+{ #category : 'helpers' }
+FRFavoritesPresenterTest >> shownNames [
+
+	^ presenter rows collect: [ :each | each favorite name ] as: Array
+]
+
+{ #category : 'tests - filter' }
+FRFavoritesPresenterTest >> testAddedFavoriteHiddenByTheFilterIsShown [
+
+	| favorite |
+	presenter filterInput text: 'side'.
+	favorite := FRFavorite url: 'git@github.com:FedeLoch/Ume.git'.
+	store add: favorite.
+	presenter favoriteAccepted: favorite.
+	self assert: presenter filterInput text isEmpty.
+	self assert: presenter selectedFavorite name equals: 'Ume'
+]
+
+{ #category : 'tests - filter' }
+FRFavoritesPresenterTest >> testAddedFavoriteMatchingTheFilterKeepsIt [
+
+	| favorite |
+	presenter filterInput text: 'sea'.
+	favorite := FRFavorite url: 'git@github.com:pharo/Research.git'.
+	store add: favorite.
+	presenter favoriteAccepted: favorite.
+	self assert: presenter filterInput text equals: 'sea'.
+	self assert: self shownNames equals: #( 'Research' 'Seaside' )
+]
+
 { #category : 'tests' }
 FRFavoritesPresenterTest >> testBottomBranchComesRightAfterRemoveInTheMenu [
 
@@ -124,6 +154,14 @@ FRFavoritesPresenterTest >> testChangeBranchIsSaved [
 	presenter changeBranch: 'dev' of: (presenter rowNamed: 'Favrepo') favorite.
 	self assert: (store favoriteNamed: 'Favrepo' ifNone: [ nil ]) branch equals: 'dev'.
 	self assert: (presenter rowNamed: 'Favrepo') selectedBranch equals: 'dev'
+]
+
+{ #category : 'tests - filter' }
+FRFavoritesPresenterTest >> testClearedFilterShowsAllTheRows [
+
+	presenter filterInput text: 'side'.
+	presenter filterInput text: ''.
+	self assert: self shownNames equals: #( 'Favrepo' 'Roassal' 'Seaside' )
 ]
 
 { #category : 'tests' }
@@ -200,6 +238,105 @@ FRFavoritesPresenterTest >> testEveryRowShowsTheSameControls [
 	self assert: ((presenter rowNamed: 'Roassal') layout children count: [ :each | each isKindOf: SpButtonPresenter ]) equals: 2
 ]
 
+{ #category : 'tests - filter' }
+FRFavoritesPresenterTest >> testFilterDropsTheSelectionOfAHiddenRow [
+	"Favrepo is the first row, and Seaside becomes the first one: it must not become the selected one."
+
+	presenter selectFavoriteNamed: 'Favrepo'.
+	presenter filterInput text: 'sea'.
+	self assert: presenter selectedFavorite isNil
+]
+
+{ #category : 'tests - filter' }
+FRFavoritesPresenterTest >> testFilterDropsTheSelectionOfAHiddenRowInABuiltWindow [
+
+	presenter build.
+	presenter selectFavoriteNamed: 'Favrepo'.
+	presenter filterInput text: 'sea'.
+	self assert: presenter selectedFavorite isNil
+]
+
+{ #category : 'tests - filter' }
+FRFavoritesPresenterTest >> testFilterIgnoresCase [
+
+	presenter filterInput text: 'SEA'.
+	self assert: self shownNames equals: #( 'Seaside' )
+]
+
+{ #category : 'tests - filter' }
+FRFavoritesPresenterTest >> testFilterIgnoresSurroundingSpaces [
+
+	presenter filterInput text: ' sea '.
+	self assert: self shownNames equals: #( 'Seaside' )
+]
+
+{ #category : 'tests - filter' }
+FRFavoritesPresenterTest >> testFilterIsAtTheBottom [
+
+	self assert: presenter layout children last identicalTo: presenter filterInput
+]
+
+{ #category : 'tests - filter' }
+FRFavoritesPresenterTest >> testFilterKeepsTheRowPresenters [
+	"Typing only chooses which rows are shown: the image is not looked at again."
+
+	| row |
+	row := presenter rowNamed: 'Seaside'.
+	presenter filterInput text: 'sea'.
+	self assert: (presenter rowNamed: 'Seaside') identicalTo: row
+]
+
+{ #category : 'tests - filter' }
+FRFavoritesPresenterTest >> testFilterKeepsTheRowsWhoseNameContainsTheText [
+
+	presenter filterInput text: 'side'.
+	self assert: self shownNames equals: #( 'Seaside' )
+]
+
+{ #category : 'tests - filter' }
+FRFavoritesPresenterTest >> testFilterKeepsTheSelectionOfAShownRow [
+
+	presenter selectFavoriteNamed: 'Seaside'.
+	presenter filterInput text: 'sea'.
+	self assert: presenter selectedFavorite name equals: 'Seaside'
+]
+
+{ #category : 'tests - filter' }
+FRFavoritesPresenterTest >> testFilterKeepsTheSelectionOfAShownRowInABuiltWindow [
+
+	presenter build.
+	presenter selectFavoriteNamed: 'Seaside'.
+	presenter filterInput text: 'sea'.
+	self assert: presenter selectedFavorite name equals: 'Seaside'
+]
+
+{ #category : 'tests - filter' }
+FRFavoritesPresenterTest >> testFilterLooksAtTheNameOnly [
+	"Seaside is in the project SeasideSt/Seaside: the owner is not the name."
+
+	presenter filterInput text: 'SeasideSt'.
+	self assert: self shownNames isEmpty
+]
+
+{ #category : 'tests - filter' }
+FRFavoritesPresenterTest >> testFilterOfABuiltWindow [
+
+	presenter build.
+	presenter filterInput text: 'side'.
+	self assert: self shownNames equals: #( 'Seaside' ).
+	presenter filterInput text: ''.
+	self assert: self shownNames equals: #( 'Favrepo' 'Roassal' 'Seaside' )
+]
+
+{ #category : 'tests - filter' }
+FRFavoritesPresenterTest >> testFilterStaysAppliedAfterRefresh [
+
+	presenter filterInput text: 'side'.
+	store add: (FRFavorite url: 'git@github.com:FedeLoch/Ume.git').
+	presenter refresh.
+	self assert: self shownNames equals: #( 'Seaside' )
+]
+
 { #category : 'tests' }
 FRFavoritesPresenterTest >> testHelpButtonShowsTheHelp [
 
@@ -215,6 +352,12 @@ FRFavoritesPresenterTest >> testHelpDescribesEveryRowMenuItem [
 	help := FRFavoritesPresenter helpText.
 	presenter favoritesList actions allCommands do: [ :each |
 		self assert: (help includesSubstring: each name) description: [ '{1} is not in the help' format: { each name } ] ]
+]
+
+{ #category : 'tests - filter' }
+FRFavoritesPresenterTest >> testHelpDescribesTheFilter [
+
+	self assert: (FRFavoritesPresenter helpText includesSubstring: presenter filterInput placeholder)
 ]
 
 { #category : 'tests' }

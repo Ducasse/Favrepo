@@ -1,25 +1,31 @@
 "
-I am the main window of the favorites tool, four rows high and scrolling beyond: one row per favorite, sorted by name, an Iceberg button that opens Iceberg on all the repositories, a refresh button that takes the branches from Iceberg, a + button to add a favorite, and a ? button showing the help (`FRFavoritesPresenter class >> #helpText`).
+I represent the main window of the favorites tool: the favorite repositories of the user, one row each, sorted by name, under a toolbar and above a filter on their names. I hold one `FRFavoriteRowPresenter` per favorite in a `SpEasyComponentListPresenter`, and run for the rows what changes the favorites file or the image (`loadFavorite:`, `cloneFavorite:`, `changeBranch:of:`). Key messages are `refresh` and `selectFavoriteNamed:`.
 
-## Responsibility:
+## Examples
 
-- I rebuild my rows from the favorites file and a fresh catalog of the image on every change.
-- I clone a favorite, load it, change its branch, remove it (no confirmation: only the bookmark goes, and + adds it back) and open the add and edit dialogs.
-- I offer Edit, Remove from favorites (Delete key) Define bottom branch (creates and checks out `<ISO date>-Bottom` in the clone), and for Pharo external projects Create Pharo integration branch… and Open Pharo integration PR (see `FRPharoIntegration`) in the row context menu; a double-click opens the Iceberg repository browser of a favorite Iceberg has.
+```
+FRFavoritesPresenter exampleInMemory
+```
 
-## Collaborators:
+## Design Rationale
 
-- `FRFavoriteRowPresenter` shows one favorite and calls me back for Load and branch changes.
-- `FRAddFavoritePresenter` adds or edits a favorite.
-- `FRApplication` gives me the store, the catalog and the loader.
-- `SpEasyComponentListPresenter` holds the rows.
+- `refresh` rebuilds every row from the favorites file and a fresh catalog: the file is shared with other images, and Iceberg may have changed the image meanwhile.
+- The filter only chooses among the rows already built (`showMatchingRows`): typing does not read the file nor look at the image again.
+- The filter looks at the name of a favorite, not at its owner, ignoring case and surrounding spaces.
+- Adding or editing a favorite that the filter would hide clears the filter, so that the user sees the result.
+- Removing a favorite asks no confirmation: only the bookmark goes, and + adds it back.
 
-## Public API and Key Messages
+## Usage
 
-- `takeBranchesFromIceberg` (the refresh button), `refresh`, `rows`, `rowNamed:`, `selectedFavorite`, `selectFavoriteNamed:`
-- `cloneFavorite:`, `loadFavorite:`, `changeBranch:of:`, `removeFavorite:`, `removeSelectedFavorite`, `defineBottomBranchOf:`, `createPharoIntegrationBranchOf:`, `openPharoIntegrationPullRequestOf:`, `browseFavorite:`, `openAddDialog`, `openEditDialogOn:`
+1. `FRApplication>>start` instantiates and opens me, or brings to the front the window already open.
+2. My application gives me the store, the catalog and the loader, and shows the dialogs.
+3. The rows call me back (`loadFavorite:`, `cloneFavorite:`, `changeBranch:of:`); `FRAddFavoritePresenter` gives me the favorite added or edited (`favoriteAccepted:`).
+4. `updateFavrepo` closes me and starts the application again when new code was loaded (`reopen`).
 
-See `FRFavoritesPresenter class >> #exampleInMemory` and run `FRFavoritesPresenter class >> #scriptOpenInMemory`.
+## Implementation Notes
+
+- The rows are set again once the window is open (`initializeWindow:`): built before, the list misses that it needs a scroll bar.
+- `rows` and `rowNamed:` only know the rows shown; `allRows` holds also the ones the filter hides.
 "
 Class {
 	#name : 'FRFavoritesPresenter',
@@ -30,7 +36,9 @@ Class {
 		'refreshButton',
 		'icebergButton',
 		'helpButton',
-		'updateButton'
+		'updateButton',
+		'filterInput',
+		'allRows'
 	],
 	#category : 'Favrepo-Spec',
 	#package : 'Favrepo-Spec'
@@ -38,9 +46,10 @@ Class {
 
 { #category : 'examples' }
 FRFavoritesPresenter class >> exampleInMemory [
-	"The favorites presenter of the example application, not opened."
+	"Open the favorites window on example favorites and the small example image: Roassal is loaded (check mark), Favrepo, Mustache and Seaside are grey with a Load button."
 
-	^ FRApplication exampleInMemory instantiate: self
+	<example>
+	^ self instanceInMemory open
 ]
 
 { #category : 'help' }
@@ -58,6 +67,10 @@ Keep the Git repositories you work on at hand, and clone and load them with Iceb
 - **Refresh** takes the branches from Iceberg and checks again what is loaded.
 - **+** adds a favorite: type its URL, or pick a repository Iceberg already knows.
 - **?** shows this help.
+
+## The filter
+
+- **Filter by project name** (the field at the bottom) shows only the favorites whose name contains the text, ignoring case. Clear it to see all of them again.
 
 ## A row
 
@@ -78,12 +91,12 @@ Keep the Git repositories you work on at hand, and clone and load them with Iceb
 '
 ]
 
-{ #category : 'script' }
-FRFavoritesPresenter class >> scriptOpenInMemory [
-	"Open the favorites window on example favorites and the small example image: Roassal is loaded (check mark), Favrepo, Mustache and Seaside are grey with a Load button."
+{ #category : 'instances' }
+FRFavoritesPresenter class >> instanceInMemory [
+	"The favorites presenter of the example application, not opened."
 
-	<example>
-	^ self exampleInMemory open
+	<sampleInstance>
+	^ FRApplication exampleInMemory instantiate: self
 ]
 
 { #category : 'actions' }
@@ -143,6 +156,7 @@ FRFavoritesPresenter >> cloneFavorite: aFavorite [
 FRFavoritesPresenter >> connectPresenters [
 
 	list whenActivatedDo: [ :selection | selection selectedItem ifNotNil: [ :row | self browseFavorite: row favorite ] ].
+	filterInput whenTextChangedDo: [ self showMatchingRows ].
 	"Workaround for Spec before pharo-spec/Spec#1982: the list view gives every row the default height, cutting our two-line rows. Remove once the Pharo 14 build has it."
 	list contentView whenBuiltDo: [ list contentView adapter widget beRowNotHomogeneous ]
 ]
@@ -174,16 +188,17 @@ FRFavoritesPresenter >> defaultLayout [
 	^ SpBoxLayout newTopToBottom
 		  spacing: 4;
 		  add: (SpBoxLayout newLeftToRight
-				   vAlignCenter;
-				   spacing: 4;
-				   add: icebergButton expand: false;
-				   addLast: refreshButton expand: false;
-				   addLast: addButton expand: false;
-				   addLast: helpButton expand: false;
-				   addLast: updateButton expand: false;
-				   yourself)
+			   vAlignCenter;
+			   spacing: 4;
+			   add: icebergButton expand: false;
+			   addLast: refreshButton expand: false;
+			   addLast: addButton expand: false;
+			   addLast: helpButton expand: false;
+			   addLast: updateButton expand: false;
+			   yourself)
 		  expand: false;
 		  add: list;
+		  add: filterInput expand: false;
 		  yourself
 ]
 
@@ -205,8 +220,10 @@ FRFavoritesPresenter >> defineBottomBranchOf: aFavorite [
 
 { #category : 'actions' }
 FRFavoritesPresenter >> favoriteAccepted: aFavorite [
+	"Show and select the favorite just added or edited, clearing the filter when it would hide it."
 
 	self refresh.
+	(self rowNamed: aFavorite name) ifNil: [ filterInput text: '' ].
 	self selectFavoriteNamed: aFavorite name
 ]
 
@@ -214,6 +231,12 @@ FRFavoritesPresenter >> favoriteAccepted: aFavorite [
 FRFavoritesPresenter >> favoritesList [
 
 	^ list
+]
+
+{ #category : 'accessing' }
+FRFavoritesPresenter >> filterInput [
+
+	^ filterInput
 ]
 
 { #category : 'accessing' }
@@ -271,6 +294,10 @@ FRFavoritesPresenter >> initializePresenters [
 		              help: 'What Favorite repositories can do';
 		              action: [ self application showHelp: self class helpText ];
 		              yourself.
+	filterInput := self newSearchInput
+		               placeholder: 'Filter by project name';
+		               help: 'Show only the favorites whose name contains this text';
+		               yourself.
 	list := self instantiate: SpEasyComponentListPresenter.
 	list activateOnDoubleClick.
 	self initializeRowMenu.
@@ -309,7 +336,7 @@ FRFavoritesPresenter >> initializeWindow: aWindowPresenter [
 	super initializeWindow: aWindowPresenter.
 	aWindowPresenter
 		title: 'Favorite repositories';
-		initialExtent: 520 @ 209;
+		initialExtent: 520 @ 241;
 		whenOpenedDo: [ self refresh ]
 ]
 
@@ -365,15 +392,14 @@ FRFavoritesPresenter >> openPharoIntegrationPullRequestOf: aFavorite [
 FRFavoritesPresenter >> refresh [
 	"Read the favorites file again and rebuild the rows against a fresh view of the image."
 
-	| catalog selected |
+	| catalog |
 	catalog := self application catalog.
-	selected := self selectedFavorite.
-	list presenters: (self application store favorites collect: [ :each |
-				 (self instantiate: FRFavoriteRowPresenter)
-					 favoritesPresenter: self;
-					 setFavorite: each catalog: catalog;
-					 yourself ]).
-	selected ifNotNil: [ self selectFavoriteNamed: selected name ]
+	allRows := self application store favorites collect: [ :each |
+		           (self instantiate: FRFavoriteRowPresenter)
+			           favoritesPresenter: self;
+			           setFavorite: each catalog: catalog;
+			           yourself ].
+	self showMatchingRows
 ]
 
 { #category : 'accessing' }
@@ -428,6 +454,18 @@ FRFavoritesPresenter >> selectFavoriteNamed: aString [
 FRFavoritesPresenter >> selectedFavorite [
 
 	^ list selectedItem ifNotNil: [ :row | row favorite ]
+]
+
+{ #category : 'updating' }
+FRFavoritesPresenter >> showMatchingRows [
+	"Show the rows the filter accepts, keeping the selected favorite selected while it is shown."
+
+	| selected pattern |
+	selected := self selectedFavorite.
+	pattern := filterInput text trimBoth.
+	list presenters:
+		(allRows select: [ :row | pattern isEmpty or: [ row favorite name includesSubstring: pattern caseSensitive: false ] ]).
+	selected ifNotNil: [ self selectFavoriteNamed: selected name ]
 ]
 
 { #category : 'actions' }
