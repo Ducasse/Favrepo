@@ -1,10 +1,10 @@
 "
-I find the project a GitHub fork comes from, its upstream. A fork often lags behind the project, so the commit an image was built from may be only there. `FRFavoriteLoader` asks me for `upstreamRemoteFor:`.
+I find the project a GitHub fork comes from, its upstream. A fork often lags behind the project, so the commit an image was built from may be only there. `FRCloneAttacher` asks me for `upstreamRemoteFor:`.
 
 ## Examples
 
 ```
-FRUpstreamFinder exampleSpec
+FRUpstreamFinder instanceSpec
 ```
 
 ## Design Rationale
@@ -15,8 +15,8 @@ FRUpstreamFinder exampleSpec
 
 ## Usage
 
-1. `FRFavoriteLoader>>upstreamFinder` creates me.
-2. `FRFavoriteLoader>>addUpstreamTo:` sends me `upstreamRemoteFor:` and adds the remote I answer to the clone, then fetches it.
+1. `FRCloneAttacher>>upstreamFinder` creates me.
+2. `FRCloneAttacher>>addUpstreamTo:` sends me `upstreamRemoteFor:` and adds the remote I answer to the clone, then fetches it.
 
 ## Implementation Notes
 
@@ -34,13 +34,6 @@ Class {
 	#category : 'Favrepo',
 	#package : 'Favrepo'
 }
-
-{ #category : 'examples' }
-FRUpstreamFinder class >> exampleSpec [
-	"A finder that knows where Spec comes from: it answers https://github.com/pharo-spec/Spec.git for any fork of Spec."
-
-	^ self knownUrls: #( 'github://pharo-spec/Spec:v2.0.6/src' )
-]
 
 { #category : 'instance creation' }
 FRUpstreamFinder class >> gitHubRepositories: aBlock [
@@ -64,6 +57,14 @@ FRUpstreamFinder class >> imageUrls [
 		             ifAbsent: [ #(  ) ].
 	fromMetacello := MetacelloProjectRegistration registry projects flatCollect: [ :each | each repositoryDescriptions ].
 	^ (fromPharo , fromMetacello asArray , #( 'https://github.com/pharo-project/pharo.git' )) asArray
+]
+
+{ #category : 'instances' }
+FRUpstreamFinder class >> instanceSpec [
+	"A finder that knows where Spec comes from: for any fork of Spec, its fallback is https://github.com/pharo-spec/Spec.git."
+
+	<sampleInstance>
+	^ self knownUrls: #( 'github://pharo-spec/Spec:v2.0.6/src' )
 ]
 
 { #category : 'instance creation' }
